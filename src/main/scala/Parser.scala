@@ -5,18 +5,9 @@ import fastparse._, NoWhitespace._
 def wsSingle[$: P] = P(" " | "\t")
 def ws[$: P] = P((multilineCommentP | wsSingle).rep).opaque("<whitespace>")
 def newline[$: P] = P("\n\r" | "\r" | "\n").opaque("<newline>")
-
-enum DataFormats:
-  case characters, commas, lines, csv, json
-
-enum BooleanOps:
-  case And, Or, Not
-
-enum CompareOps:
-  case Less, LessEq, Greater, GreaterEq, Eq, NotEq
-
-enum ArithmaticOps:
-  case Add, Sub, Mul, Div, Expo, Mod
+def wsAndNewline[$: P] =
+  P((multilineCommentP | wsSingle | newline).rep)
+    .opaque("<whitespace or newline>")
 
 def arihmeticOperatorP[$: P] = P((CharIn("*/+^%") | "-").!).map {
   case "*" => ArithmaticOps.Mul
@@ -45,67 +36,8 @@ def compareOperatorP[$: P] = P(("==" | "!=" | "<=" | ">=" | "<" | ">").!).map {
   case _    => assert(false, "comparision operator not defined")
 }
 
-trait Operator
-trait Value
-trait Statement
-
-case class ArithmaticOp(op: ArithmaticOps) extends Operator
-case class CompareOp(op: CompareOps) extends Operator
-case class BooleanOp(op: BooleanOps) extends Operator
-
-case class NoneValue() extends Value:
-  override def toString(): String =
-    "none"
-case class Identifier(name: String) extends Value
-case class Number(value: Double) extends Value:
-  override def toString(): String =
-    if (value - value.toInt == 0) value.toInt.toString
-    else value.toString
-
-case class Bool(b: Boolean) extends Value:
-  override def toString(): String = b.toString
-
-case class BinaryOp(left: Value, op: Operator, right: Value) extends Value
-case class UnaryOp(op: Operator, operant: Value) extends Value
-case class Function(args: Seq[String], body: Seq[Statement]) extends Value
-case class Load(filename: Value, dataformat: DataFormats) extends Value
-case class Wrapped(value: Value) extends Value
-case class StdString(value: String) extends Value:
-  override def toString(): String = value.toString
-
-case class FormatString(value: List[Value]) extends Value
-class DictionaryEntry(var key: Value, var value: Value):
-  override def toString(): String = key.toString + ": " + value.toString
-
-case class Dictionary(val entries: Seq[DictionaryEntry]) extends Value:
-  override def toString(): String =
-    "{" + entries.mkString(", ") + "}"
-
-case class ArrayLiteral(val elements: Seq[Value]) extends Value:
-  override def toString(): String =
-    "(" + elements.mkString(", ") + ")"
-
-case class StructureAccess(identifier: Value, key: Value) extends Value
-
-case class Assignment(varName: String, value: Value) extends Statement
-case class StructuredAssignment(struct: StructureAccess, value: Value)
-    extends Statement
-case class Branch(condition: Value, body: Seq[Statement])
-case class If(
-    ifBranch: Branch,
-    elifBranches: Seq[Branch],
-    elseBranch: Option[Seq[Statement]]
-) extends Statement
-case class WhileLoop(loop: Branch) extends Statement
-case class Expression(expr: Value) extends Statement
-case class Return(value: Value) extends Statement
-
-case class FunctionCall(functionExpr: Value, args: Seq[Value])
-    extends Value,
-      Statement
-
-def condition[$: P]: P[Value] =
-  P("(" ~ ws ~ expression(identifierP) ~ ws ~ ")").opaque("<condition>")
+def condition[$: P]: P[Expression] =
+  P("(" ~ ws ~ expression(identifierP, 0) ~ ws ~ ")").opaque("<condition>")
 
 def initialBranch[$: P]: P[Branch] =
   P(
@@ -129,7 +61,7 @@ def ifStatement[$: P]: P[Statement] =
     .map(If(_, _, _))
 
 def returnP[$: P]: P[Statement] =
-  P("return" ~ ws ~ expression(identifierP)).map(Return(_))
+  P("return" ~ ws ~ expression(identifierP, 0)).map(Return(_))
 
 def statementP[$: P]: P[Statement] =
   returnP | whileLoop | ifStatement | functionCallStatement | structuredAssignmentP | assignmentP
@@ -140,7 +72,7 @@ def codeBlock[$: P]: P[Seq[Statement]] =
   )
 
 def functionDefBodyP[$: P]: P[Seq[Statement]] =
-  codeBlock | expression(identifierP).map((v) => Seq(Expression(v)))
+  codeBlock | expression(identifierP, 0).map((v) => Seq(Return(v)))
 
 def functionDefArgsP[$: P]: P[Seq[String]] = (
   identifierP ~ (ws ~ "," ~ ws ~ functionDefArgsP).?
@@ -151,7 +83,7 @@ def functionDefArgsP[$: P]: P[Seq[String]] = (
   }
 )
 
-def functionDefP[$: P]: P[Value] = (
+def functionDefP[$: P]: P[Expression] = (
   "(" ~ ws ~ functionDefArgsP.? ~ ws ~ ")" ~ ws ~ "=>" ~ ws ~ functionDefBodyP
 ).map((bs, b) =>
   bs match {
@@ -160,16 +92,16 @@ def functionDefP[$: P]: P[Value] = (
   }
 )
 
-def noneP[$: P]: P[Value] = P("none").!.map(_ => NoneValue())
+def noneP[$: P]: P[Expression] = P("none").!.map(_ => NoneValue())
 
-def valueP[$: P](idParser: => P[Value]): P[Value] =
+def valueP[$: P](idParser: => P[Expression]): P[Expression] =
   noneP | booleanP | stringP | unaryOpExpression(
     idParser
-  ) | dictionaryP | arrayLiteralP | structureAccess | functionCallValue(
+  ) | dictionaryP | arrayLiteralP | structureAccess | functionCallExpression(
     idParser
   ) | numberP
 
-def booleanP[$: P]: P[Value] = P(
+def booleanP[$: P]: P[Expression] = P(
   ("true" | "false").!
 ).opaque("<boolean value>").map {
   case "true"  => Bool(true)
@@ -177,8 +109,8 @@ def booleanP[$: P]: P[Value] = P(
   case _       => assert(false, "unreachable")
 }
 
-def functionCallArgsP[$: P]: P[Seq[Value]] = (
-  expression(identifierP) ~ (ws ~ "," ~ ws ~ functionCallArgsP).?
+def functionCallArgsP[$: P]: P[Seq[Expression]] = (
+  expression(identifierP, 0) ~ (ws ~ "," ~ ws ~ functionCallArgsP).?
 ).map((v, vs) =>
   vs match {
     case None     => Seq(v)
@@ -186,15 +118,15 @@ def functionCallArgsP[$: P]: P[Seq[Value]] = (
   }
 )
 
-def functionName[$: P](idParser: => P[Value]): P[Value] =
+def functionName[$: P](idParser: => P[Expression]): P[Expression] =
   idParser | wrappedExpression(idParser)
 
-def functionCallManyArgs[$: P]: P[Seq[Seq[Value]]] =
+def functionCallManyArgs[$: P]: P[Seq[Seq[Expression]]] =
   P(ws ~ "(" ~ ws ~ functionCallArgsP.? ~ ws ~ ")")
     .map(_.getOrElse(Seq()))
     .rep
 
-def functionCallValue[$: P](idParser: => P[Value]): P[Value] = P(
+def functionCallExpression[$: P](idParser: => P[Expression]): P[Expression] = P(
   functionName(idParser) ~ functionCallManyArgs
 ) // .opaque("<function call>")
   .map((n, bs) =>
@@ -245,113 +177,72 @@ def unaryOperator[$: P]: P[Operator] =
 // Some operators should be calculated before other operators.
 // eg. 4 - 4 * 4 => 4*4 gets calculated before 4-4.
 // So the "precedence" of * is higher than of -. This is handled here.
-enum OperatorContext:
-  case Binary, Unary
-
-def precedence(op: ArithmaticOps, ctxt: OperatorContext) = op match {
-  case ArithmaticOps.Add =>
-    if (ctxt == OperatorContext.Binary) 4
-    else 6
-  case ArithmaticOps.Sub =>
-    if (ctxt == OperatorContext.Binary) 4
-    else 6
-  case ArithmaticOps.Mul  => 5
-  case ArithmaticOps.Div  => 5
-  case ArithmaticOps.Mod  => 5
-  case ArithmaticOps.Expo => 7
+def precedenceOf(oper: Operator): Int = oper match {
+  case ArithmaticOp(op) =>
+    op match {
+      case ArithmaticOps.Add  => 5
+      case ArithmaticOps.Sub  => 5
+      case ArithmaticOps.Mul  => 6
+      case ArithmaticOps.Div  => 6
+      case ArithmaticOps.Mod  => 6
+      case ArithmaticOps.Expo => 8
+    }
+  case BooleanOp(op) =>
+    op match {
+      case BooleanOps.And => 2
+      case BooleanOps.Or  => 1
+      case BooleanOps.Not => 3
+    }
+  case _ => 4
 }
 
-def precedence(op: BooleanOps, ctxt: OperatorContext) = op match {
-  case BooleanOps.And => 2
-  case BooleanOps.Or  => 1
-  case BooleanOps.Not =>
-    if (ctxt == OperatorContext.Unary) 3
-    else assert(false, "Unary 'Not' in Binary context")
-}
-
-def precedenceOf(value: Value): Int = value match {
-  case BinaryOp(_, ArithmaticOp(op), _) =>
-    precedence(op, OperatorContext.Binary)
-  case BinaryOp(_, BooleanOp(op), _) =>
-    precedence(op, OperatorContext.Binary)
-  case BinaryOp(_, CompareOp(_), _)          => 0
-  case UnaryOp(BooleanOp(BooleanOps.Not), _) => 3
-  case UnaryOp(op: ArithmaticOp, _) =>
-    precedence(op.op, OperatorContext.Unary)
-  case UnaryOp(_, _) => 0
-}
-
-def orderBy(opExpr: BinaryOp | UnaryOp, pred: Value => Int): Value =
-  opExpr match {
-    case BinaryOp(left, op, right) =>
-      right match {
-        case b: BinaryOp =>
-          if (pred(opExpr) >= pred(b))
-            val inner = orderBy(BinaryOp(left, op, b.left), pred)
-            BinaryOp(inner, b.op, b.right)
-          else opExpr
-        case _ => opExpr
-      }
-
-    case UnaryOp(op, value) =>
-      value match {
-        case b: BinaryOp =>
-          if (pred(opExpr) >= pred(b))
-            val inner = orderBy(UnaryOp(op, b.left), pred)
-            BinaryOp(inner, b.op, b.right)
-          else opExpr
-        case _ => opExpr
-      }
-  }
-
-def unaryOpExpression[$: P](idParser: => P[Value]): P[Value] =
-  (unaryOperator ~ ws ~ expression(idParser))
+def unaryOpExpression[$: P](idParser: => P[Expression]): P[Expression] =
+  (unaryOperator ~ ws ~ expression(idParser, 7))
     .opaque("<unary operator>")
-    .map((op, value) => orderBy(UnaryOp(op, value), precedenceOf))
+    .map((op, value) => UnaryOp(op, value))
 
-def binaryOpExpression[$: P](idParser: => P[Value]): P[Value] = (
-  valueP(idParser) ~/ (ws ~ binaryOperator ~ ws ~ expression(idParser)).?
-).map((l, rest) =>
-  rest match {
-    case Some((op, r)) =>
-      orderBy(BinaryOp(l, op, r), precedenceOf)
-    case None => l
-  }
+def binaryOpExpression[$: P](
+    idParser: => P[Expression],
+    prec: Int
+): P[Expression] =
+  def precedenceFilter(op: Operator): Boolean =
+    val op_prec = precedenceOf(op)
+    op_prec > prec || op_prec == prec && op == ArithmaticOp(ArithmaticOps.Expo)
+
+  def expr(op: Operator): P[(Operator, Expression)] =
+    (wsAndNewline ~ expression(idParser, precedenceOf(op))).map((e) => (op, e))
+
+  (valueP(idParser) ~/ (wsAndNewline ~ binaryOperator
+    .filter(precedenceFilter)
+    .flatMap(expr)).rep).map((l, rest) =>
+    rest.foldLeft(l)((acc, v: (Operator, Expression)) =>
+      BinaryOp(acc, v._1, v._2)
+    )
+  )
+
+def wrappedExpression[$: P](idParser: => P[Expression]): P[Expression] =
+  P(
+    "(" ~ wsAndNewline ~ expression(idParser, 0) ~ wsAndNewline ~ ")"
+  ).map(Wrapped(_))
+
+def expression[$: P](idParser: => P[Expression], prec: Int): P[Expression] = (
+  functionDefP | binaryOpExpression(idParser, prec)
 )
 
-def dataFormatsP[$: P]: P[DataFormats] =
-  P("characters" | "commas" | "lines" | "csv" | "json").!.map {
-    case "characters" => DataFormats.characters
-    case "commas"     => DataFormats.commas
-    case "lines"      => DataFormats.lines
-    case "csv"        => DataFormats.csv
-    case "json"       => DataFormats.json
-    case _            => assert(false, "Unexpected file format.")
-  }
-
-def loadP[$: P]: P[Value] =
-  (P("load") ~ ws ~ (stdStringP | identifierP) ~ ws ~ P(
-    "as"
-  ) ~ ws ~ dataFormatsP).map((file, format) => Load(file, format))
-
-def wrappedExpression[$: P](idParser: => P[Value]): P[Value] =
-  P("(" ~ ws ~ expression(idParser) ~ ws ~ ")").map(Wrapped(_))
-
-def expression[$: P](idParser: => P[Value]): P[Value] = (
-  loadP | functionDefP | binaryOpExpression(idParser)
-)
-
-def identifierP[$: P]: P[Identifier] = P(
-  (CharIn("a-zA-Z") ~ CharIn("a-zA-z0-9_").rep).!.map(Identifier(_))
-).opaque("<identifier>")
+def identifierP[$: P]: P[Identifier] = P(!(CharIn("^")) ~ CharIn("a-zA-z0-9_"))
+  .rep(min = 1)
+  .!
+  .filter(s => !(s(0) == '_' || s(0).isDigit))
+  .map(Identifier(_))
+  .opaque("<identifier>")
 
 def assignmentP[$: P]: P[Statement] =
-  (identifierP.! ~/ ws ~ "=" ~ ws ~ expression(identifierP)).map((n, v) =>
+  (identifierP.! ~/ ws ~ "=" ~ ws ~ expression(identifierP, 0)).map((n, v) =>
     Assignment(n, v)
   )
 
 def structuredAssignmentP[$: P]: P[Statement] =
-  (structureAccess ~/ ws ~ "=" ~ ws ~ expression(identifierP))
+  (structureAccess ~/ ws ~ "=" ~ ws ~ expression(identifierP, 0))
     .filter((s, _) => s.isInstanceOf[StructureAccess])
     .map((n, v) => StructuredAssignment(n.asInstanceOf[StructureAccess], v))
 
@@ -364,16 +255,14 @@ def commentP[$: P] = P(inlineCommentP | multilineCommentP)
 
 // Root rule
 def yadlParser[$: P]: P[Seq[Statement]] =
-  ((statementP.? ~ ws ~ (commentP | newline))).rep.map(l =>
-    l.map(_.toList).flatten
-  )
+  ((statementP.? ~ ws ~ (commentP | newline))).rep.map(l => l.flatMap(_.toList))
   // fastparse (the parsing library that we use) syntax:
   // This code means that we call a parser for a statement, then a parser for whitespaces, then for newlines.
   // This can be repeated any number of times (signaled by .rep). As regex: (statement whitespace* newline)*
 
 //Hilfsparser Number
 def digitsP[$: P](digitParser: => P[Char]): P[String] =
-  (digitParser ~ (("_" ~ digitParser) | digitParser).rep)
+  (digitParser ~ (P("_").? ~ digitParser).rep)
     .map((f, r) => r.foldLeft(StringBuffer().append(f))(_.append(_)).toString)
 
 def dezimalP[$: P] = P(CharIn("0-9").!).map(_.head)
@@ -414,28 +303,28 @@ def numberDigits[$: P](baseType: Base) = baseType match {
 def dotDigits[$: P](base: Base): P[Number] =
   ("." ~ numberDigits(base)).map(s =>
     base match
-      case Base.Binary      => Number(basisToDecimal("0", s, 2))
-      case Base.Octal       => Number(basisToDecimal("0", s, 8))
-      case Base.Decimal     => Number(("0." + s).toDouble)
-      case Base.Hexadecimal => Number(basisToDecimal("0", s, 16))
+      case Base.Binary      => YadlFloat(basisToDecimal("0", s, 2))
+      case Base.Octal       => YadlFloat(basisToDecimal("0", s, 8))
+      case Base.Decimal     => YadlFloat(("0." + s).toDouble)
+      case Base.Hexadecimal => YadlFloat(basisToDecimal("0", s, 16))
   )
 
 def digitsDotDigits[$: P](base: Base): P[Number] =
   (numberDigits(base) ~ "." ~ numberDigits(base)).map((f, r) =>
     base match
-      case Base.Binary      => Number(basisToDecimal(f, r, 2))
-      case Base.Octal       => Number(basisToDecimal(f, r, 8))
-      case Base.Decimal     => Number((f + "." + r).toDouble)
-      case Base.Hexadecimal => Number(basisToDecimal(f, r, 16))
+      case Base.Binary      => YadlFloat(basisToDecimal(f, r, 2))
+      case Base.Octal       => YadlFloat(basisToDecimal(f, r, 8))
+      case Base.Decimal     => YadlFloat((f + "." + r).toDouble)
+      case Base.Hexadecimal => YadlFloat(basisToDecimal(f, r, 16))
   )
 
 def digits[$: P](base: Base): P[Number] =
   (numberDigits(base)).map(s =>
     base match
-      case Base.Binary      => Number(basisToDecimal(s, "0", 2))
-      case Base.Octal       => Number(basisToDecimal(s, "0", 8))
-      case Base.Decimal     => Number(s.toDouble)
-      case Base.Hexadecimal => Number(basisToDecimal(s, "0", 16))
+      case Base.Binary      => YadlInt(java.lang.Long.parseLong(s, 2))
+      case Base.Octal       => YadlInt(java.lang.Long.parseLong(s, 8))
+      case Base.Decimal     => YadlInt(s.toInt)
+      case Base.Hexadecimal => YadlInt(java.lang.Long.parseLong(s, 16))
   )
 
 def numberFull[$: P](base: Base): P[Number] =
@@ -465,13 +354,13 @@ def charForStringSingleQuote[$: P] = P(
 def charForMultilineStringDoubleQuote[$: P] = P(!"\"\"\"" ~ ("\\\\" | AnyChar))
 def charForMultilineStringSingleQuote[$: P] = P(!"\'\'\'" ~ ("\\\\" | AnyChar))
 
-def expressionEnd[$: P] = P(ws ~ expression(identifierP) ~ ws ~ End)
+def expressionEnd[$: P] = P(ws ~ expression(identifierP, 0) ~ ws ~ End)
 
 def formatStringMap(input: String): FormatString = {
   // Replace all occurrences of "\\{" with newline "\n"
   val replacedInput = input.replace("\\{", "\n").replace("\\}", "\r")
 
-  var result: List[Value] = List()
+  var result: List[Expression] = List()
 
   var next_input = ""
   var braces_open = false
@@ -534,10 +423,7 @@ def formatStringP[$: P]: P[FormatString] = P(
   ).map(formatStringMap)
 )
 
-def stringP[$: P]: P[Value] = formatStringP | stdMultiStringP | stdStringP
-
-// @language-team because you are indecisive of where to put the comma
-// could be simpler
+def stringP[$: P]: P[Expression] = formatStringP | stdMultiStringP | stdStringP
 
 def dictionaryEntries[$: P]: P[Dictionary] =
   def dictionaryEntry[$: P]: P[DictionaryEntry] =
@@ -556,26 +442,31 @@ def dictionaryEntries[$: P]: P[Dictionary] =
 def dictionaryP[$: P]: P[Dictionary] =
   P("{" ~ ws ~ newline.? ~ dictionaryEntries ~ ws ~ "}")
 
-def structureAccess[$: P]: P[Value] =
-  def openIndex[$: P]: P[Unit] =
-    P(CharPred(_ == '[')).opaque("<open index>")
-  def closeIndex[$: P]: P[Unit] =
-    P(CharPred(_ == ']')).opaque("<close index>")
+def openIndex[$: P]: P[Unit] =
+  P(CharPred(_ == '[')).opaque("<open index>")
+def closeIndex[$: P]: P[Unit] =
+  P(CharPred(_ == ']')).opaque("<close index>")
 
-  def internalIdentifier[$: P]: P[Value] =
-    P(!(closeIndex | openIndex) ~ CharIn("a-zA-z0-9_"))
-      .rep(min = 1)
-      .!
-      .filter(s => !(s(0) == '_' || s(0).isDigit))
-      .map(Identifier(_))
+def internalIdentifier[$: P]: P[Expression] =
+  P(!(closeIndex | openIndex | CharIn("^")) ~ CharIn("a-zA-z0-9_"))
+    .rep(min = 1)
+    .!
+    .filter(s => !(s(0) == '_' || s(0).isDigit))
+    .map(Identifier(_))
 
-  def access[$: P]: P[Value] =
-    P(openIndex ~ ws ~ expression(internalIdentifier) ~ ws ~ closeIndex)
+def structureAccess[$: P]: P[Expression] =
+
+  def access[$: P]: P[Expression] =
+    P(openIndex ~ ws ~ expression(internalIdentifier, 0) ~ ws ~ closeIndex)
 
   P(internalIdentifier ~ (ws ~ access).rep(min = 1))
     .map((i, v) => v.foldLeft(i)((acc, a) => StructureAccess(acc, a)))
 
 //Parser Array (we use structureAccess for accessing arrays)
 def arrayLiteralP[$: P]: P[ArrayLiteral] =
-  P("[" ~ ws ~ expression(identifierP).rep(sep = ws ~ "," ~ ws) ~ ws ~ "]")
+  P(
+    "[" ~ ws ~ expression(internalIdentifier, 0).rep(sep =
+      ws ~ "," ~ ws ~ newline.?
+    ) ~ ws ~ newline.? ~ "]"
+  )
     .map(ArrayLiteral.apply)

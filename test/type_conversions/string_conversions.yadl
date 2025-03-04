@@ -1,0 +1,13 @@
+// RUN: DEFAULT
+
+x = "It is " + string(42)
+y = string(42) + " it is"
+
+// z = "hi" * 2
+
+print(x)
+print(y)
+
+// CHECK-OUT: It is 42
+// CHECK-OUT: 42 it is
+
