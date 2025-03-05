@@ -137,8 +137,8 @@ def toDataObject(value: Expression): DataObject =
       ListObj(x.elements.map(toDataObject).to(ArrayBuffer))
     case x: parser.Dictionary => {
       val m = HashMap[DataObject, DataObject]()
-      for (e <- x.entries) {
-        m.put(toDataObject(e.key), toDataObject(e.value))
+      for ((key, value) <- x.entries) {
+        m.put(toDataObject(key), toDataObject(value))
       }
       DictionaryObj(m)
     }
@@ -166,7 +166,7 @@ def toDataObject(value: Expression): DataObject =
     case v => assert(false, s"Value can not be converted to DataObject: $v")
   }
 
-def toAstNode(data: DataObject): Expression =
+def toAstNode(data: DataObject): parser.Value =
   data match
     case NumberObj(value) =>
       if (value - value.toLong == 0)
@@ -179,15 +179,13 @@ def toAstNode(data: DataObject): Expression =
       StdString(value)
     case DictionaryObj(value) =>
       Dictionary(value.map { case (k, v) =>
-        DictionaryEntry(toAstNode(k), toAstNode(v))
-      }.toSeq)
+        (toAstNode(k), toAstNode(v))
+      })
     case ListObj(value) =>
-      parser.ArrayLiteral(value.map(toAstNode).toSeq)
+      parser.Array(value.map(toAstNode).toSeq)
     case NoneObj() =>
       parser.NoneValue()
     case x: IteratorObj => {
       toAstNode(stdlib.toListObj(x)) // TODO this is bad!
     }
-    case x: ListObj =>
-      ArrayLiteral(x.value.map(x => toAstNode(x)).toSeq) // TODO this is bad!
     case v => assert(false, s"Data object not convertable to AST node: $v")

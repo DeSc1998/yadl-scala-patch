@@ -2,38 +2,20 @@ package stdlib
 
 import interpreterdata.*
 import scala.collection.mutable.ArrayBuffer
+import parser.{Value, StdString, Number, Bool, Dictionary, Array, Function}
 
 /** Generic utility method that converts any Data Object to a String Object if
   * possible (throws an error otherwise) Can be used outside the stdlib if
   * necessary.
   */
-def toStringObj(obj: DataObject): StringObj = {
-  obj match {
-    case x: NumberObj  => StringObj(x.value.toString)
-    case x: StringObj  => x
-    case x: BooleanObj => StringObj(x.value.toString)
-    case x: FunctionObj => {
-      val optionalsStr =
-        if (x.optionals.nonEmpty)
-          ", " + x.optionals
-            .map(opt => opt._1 + "=" + opt._2.typeName)
-            .mkString(", ")
-        else ""
-      val argListStr = x.argList match {
-        case Some(s) => s", $s..."
-        case None    => ""
-      }
-      StringObj(
-        "function(%s%s%s)" format (x.params.mkString(
-          ", "
-        ), optionalsStr, argListStr)
-      )
-    }
-    case x: DictionaryObj => StringObj(serializeJSONCompact(x, Seq()))
-    case x: ListObj       => StringObj(serializeJSONCompact(x, Seq()))
-    case x: NoneObj       => StringObj(x.typeName)
-    case x: UndefinedObj  => StringObj(x.typeName)
-    case x: IteratorObj   => StringObj(x.typeName)
+def toStringObj(value: Value): Value = {
+  value match {
+    case x: (Number | Bool)      => StdString(x.toString)
+    case x: StdString            => x
+    case x: parser.NoneValue     => StdString("none")
+    case x: parser.YadlIterator  => StdString("<iterator>")
+    case x: Function             => StdString("<function>")
+    case x: (Dictionary | Array) => StdString(serializeJSONCompact(x, Seq()))
   }
 }
 
@@ -41,19 +23,18 @@ def toStringObj(obj: DataObject): StringObj = {
   * possible (throws an error otherwise) Can be used outside the stdlib if
   * necessary.
   */
-def toBooleanObj(obj: DataObject): BooleanObj = obj match {
-  case x: BooleanObj    => x
-  case x: NumberObj     => BooleanObj(x.value != 0)
-  case x: StringObj     => BooleanObj(x.value.nonEmpty)
-  case x: NoneObj       => BooleanObj(false)
-  case x: DictionaryObj => BooleanObj(x.value.nonEmpty)
-  case x: ListObj       => BooleanObj(x.value.nonEmpty)
+def toBooleanObj(obj: Value): Value = obj match {
+  case x: Bool             => x
+  case x: Number           => Bool(x.toString != "0" || x.toString != "0.0")
+  case x: StdString        => Bool(x.value.nonEmpty)
+  case x: parser.NoneValue => Bool(false)
+  case x: Dictionary       => Bool(x.entries.nonEmpty)
+  case x: Array            => Bool(x.elements.nonEmpty)
+  case x: Function         => Bool(true)
   // Note: Possible while true loop here,
   // but if the programmer returns an iterator in the hastNext
   // function, they don't deserve any better.
-  case x: IteratorObj  => toBooleanObj(x.hasNext.function(Seq(x.data)))
-  case x: UndefinedObj => throw IllegalArgumentException()
-  case x: FunctionObj  => BooleanObj(true)
+  // case x: IteratorObj  => toBooleanObj(x.hasNext.function(Seq(x.data)))
 }
 
 /** Generic utility method that converts any Data Object to an Iterator Object
@@ -128,11 +109,10 @@ def toIteratorObj(obj: DataObject): IteratorObj = obj match {
   case _                => throw IllegalArgumentException()
 }
 
-def toNumberObj(obj: DataObject): NumberObj = obj match {
-  case x: NumberObj  => x
-  case x: StringObj  => throw IllegalArgumentException()
-  case BooleanObj(x) => if (x == true) NumberObj(1) else NumberObj(0)
-  case _             => throw IllegalArgumentException()
+def toNumberObj(obj: Value): Number = obj match {
+  case x: Number => x
+  case Bool(x)   => if (x == true) parser.YadlInt(1) else parser.YadlInt(0)
+  case _         => throw IllegalArgumentException()
 }
 
 def toListObj(obj: DataObject): ListObj = obj match {
@@ -176,48 +156,32 @@ private def escapeJsonString(str: String): String = {
 }
 
 private def serializeJSONCompact(
-    obj: DataObject,
+    obj: Value,
     references: Seq[Any]
 ): String = {
   obj match {
-    case NoneObj       => s"\"${obj.typeName}\""
-    case UndefinedObj  => s"\"${obj.typeName}\""
-    case IteratorObj   => s"\"${obj.typeName}\""
-    case FunctionObj   => s"\"${obj.typeName}\""
-    case BooleanObj(x) => x.toString
-    case NumberObj(x) => {
-      if (x == x.toInt) {
-        x.toInt.toString
-      } else {
-        x.toString
-      }
-    }
-    case StringObj(x) => s"\"${escapeJsonString(x)}\""
-    case ListObj(lst) => {
-      if (references.contains(lst)) {
+    case _: parser.NoneValue    => "\"null\""
+    case value: (Bool | Number) => value.toString
+    case StdString(value)       => s"\"${escapeJsonString(value)}\""
+    case Array(items) => {
+      if (references.contains(items)) {
         throw IllegalArgumentException(
           "cannot serialize self referencing data structures"
         )
       }
 
-      "[" + (lst.map(e =>
-        serializeJSONCompact(e, references :+ lst)
+      "[" + (items.map(e =>
+        serializeJSONCompact(e, references :+ items)
       ) mkString ", ") + "]"
     }
-    case DictionaryObj(dict) => {
-      if (references.contains(dict)) {
-        throw IllegalArgumentException(
-          "cannot serialize self referencing data structures"
-        )
-      }
-
-      "{" + (dict.map((k, v) =>
+    case Dictionary(entries) => {
+      "{" + (entries.map((k, v) =>
         serializeJSONCompact(
           k,
-          references :+ dict
-        ) + ": " + serializeJSONCompact(v, references :+ dict)
+          references :+ entries
+        ) + ": " + serializeJSONCompact(v, references :+ entries)
       ) mkString ", ") + "}"
     }
-    case _ => throw UnsupportedOperationException()
+    case v => throw UnsupportedOperationException(v.toString)
   }
 }

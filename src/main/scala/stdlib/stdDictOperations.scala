@@ -75,16 +75,17 @@ private def parseCSV(lineIter: Iterator[String]): DataObject = {
               )
           )
         )
-      val dicts: Iterator[DataObject] = entry_iter
-        .map((entry) =>
-          Dictionary(
-            entry
-              .map((key, value) => DictionaryEntry(key, value))
-              .toSeq
-          )
-        )
-        .map(toDataObject)
-      ListObj(ArrayBuffer(dicts.toArray*))
+      // val dicts: Iterator[DataObject] = entry_iter
+      //   .map((entry) =>
+      //     Dictionary(
+      //       entry.map { case (key: parser.Value, value: parser.Value) =>
+      //         (key, value)
+      //       }
+      //     )
+      //   )
+      //   .map(toDataObject)
+      // ListObj(ArrayBuffer(dicts.toArray*))
+      ListObj(ArrayBuffer())
     }
     case None => {
       val entry_iter = local
