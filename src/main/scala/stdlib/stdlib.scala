@@ -1,7 +1,6 @@
 package stdlib
 
 import interpreterdata._
-import scala.annotation.meta.param
 import parser.YadlInt
 import parser.YadlFloat
 
@@ -38,17 +37,17 @@ def matchCall(
   } else throw IllegalArgumentException("Not enough arguments")
 
 def builtinPrint(call_match: CallMatch): parser.Value =
-  val output = call_match.params
+  val output = call_match.varArgs
     .map(_.toString)
     .mkString(" ")
   println(output)
   parser.NoneValue()
 
 def builtinWrite(call_match: CallMatch): parser.Value =
-  val output = call_match.params
+  val output = call_match.varArgs
     .map(_.toString)
     .mkString(" ")
-  print(output)
+  Console.print(output)
   parser.NoneValue()
 
 def asInteger(call_match: CallMatch): parser.Value =
