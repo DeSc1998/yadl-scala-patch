@@ -1,5 +1,7 @@
 package parser
 
+import scala.collection.mutable.HashMap;
+
 enum BooleanOps:
   case And, Or, Not
 
@@ -12,7 +14,8 @@ enum ArithmaticOps:
 trait Operator
 trait Expression
 trait Statement
-trait Number extends Expression:
+trait Value extends Expression
+trait Number extends Value:
   def `+`(other: Number): Number
   def `*`(other: Number): Number
   def `/`(other: Number): Number
@@ -29,10 +32,11 @@ case class ArithmaticOp(op: ArithmaticOps) extends Operator
 case class CompareOp(op: CompareOps) extends Operator
 case class BooleanOp(op: BooleanOps) extends Operator
 
-case class NoneValue() extends Expression:
+case class NoneValue() extends Value:
   override def toString(): String =
     "none"
-case class YadlIterator() extends Expression
+case class YadlIterator()
+    extends Value // TODO: add all necessary values in here
 case class Identifier(name: String) extends Expression
 case class YadlFloat(value: Double) extends Number:
   override def toString(): String = value.toString
@@ -81,26 +85,37 @@ case class YadlInt(value: Long) extends Number:
 
   override def asFloat: Double = value.toDouble
 
-case class Bool(b: Boolean) extends Expression:
+case class Bool(b: Boolean) extends Value:
   override def toString(): String = b.toString
 
 case class BinaryOp(left: Expression, op: Operator, right: Expression)
     extends Expression
 case class UnaryOp(op: Operator, operant: Expression) extends Expression
-case class Function(args: Seq[String], body: Seq[Statement]) extends Expression
+case class Function(args: Seq[String], body: Seq[Statement]) extends Value
 case class Wrapped(value: Expression) extends Expression
-case class StdString(value: String) extends Expression:
+case class StdString(value: String) extends Value:
   override def toString(): String = value.toString
 
-case class FormatString(value: List[Expression]) extends Expression
+case class FormatString(value: List[Expression]) extends Value
 class DictionaryEntry(var key: Expression, var value: Expression):
   override def toString(): String = key.toString + ": " + value.toString
 
-case class Dictionary(val entries: Seq[DictionaryEntry]) extends Expression:
+case class DictionaryLiteral(val entries: Seq[DictionaryEntry])
+    extends Expression:
   override def toString(): String =
     "{" + entries.mkString(", ") + "}"
 
+case class Dictionary(val entries: HashMap[Value, Value]) extends Value:
+  override def toString(): String =
+    "{" + entries
+      .map { case (key, value) => key.toString + ": " + value.toString }
+      .mkString(", ") + "}"
+
 case class ArrayLiteral(val elements: Seq[Expression]) extends Expression:
+  override def toString(): String =
+    "[" + elements.mkString(", ") + "]"
+
+case class Array(val elements: Seq[Value]) extends Value:
   override def toString(): String =
     "[" + elements.mkString(", ") + "]"
 

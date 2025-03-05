@@ -4,8 +4,10 @@ import BooleanOps.{And, Not, Or}
 import CompareOps.{Eq, Greater, GreaterEq, Less, LessEq, NotEq}
 import scala.collection.mutable.Stack
 import scala.annotation.unused
+import scala.collection.mutable
+import java.{util => ju}
 
-val builtins = stdlib.stdlib
+val builtins = stdlib.builtins
 
 type HashMap[K, V] = scala.collection.mutable.HashMap[K, V]
 type MutArray[V] = scala.collection.mutable.ArrayBuffer[V]
@@ -196,17 +198,17 @@ def evalFunctionCall(
         print("\n")
         scope
       } else if (builtins.contains(identifier)) {
-        val callArgsNew = evaledCallArgs.map { value =>
-          interpreterdata.toDataObject(value)
+        val callArgsNew: Seq[Value] = evaledCallArgs.map { value =>
+          value match {
+            case v: Value => v
+            case _        => assert(false, "unreachable")
+          }
         }
-        val Some(func) = builtins.get(identifier): @unchecked
-        assert(
-          func.n_args == callArgs.length,
-          s"function call: expected ${func.n_args} argument(s) but got ${callArgs.length}"
-        )
-        val result = func.function(callArgsNew)
+        val Some(call_context) = builtins.get(identifier): @unchecked
+        val call_match = stdlib.matchCall(callArgsNew, call_context)
+        val result = call_context.function(call_match)
         if (context == CallContext.Expression)
-          scope.returnExpression(interpreterdata.toAstNode(result))
+          scope.returnExpression(result)
         else scope
       } else {
         scope.lookupFunction(Identifier(identifier)) match {
@@ -282,12 +284,12 @@ def evalReturn(value: Expression, scope: Scope): Scope =
     }
 
 class AccessContext():
-  private var context: Stack[(Expression, Expression)] = new Stack
+  private var context: Stack[(Value, Value)] = new Stack
 
-  def push(key: Expression, value: Expression): Unit =
+  def push(key: Value, value: Value): Unit =
     this.context.push((key, value))
 
-  def pop(): Option[(Expression, Expression)] =
+  def pop(): Option[(Value, Value)] =
     try {
       Some(this.context.pop())
     } catch {
@@ -299,20 +301,14 @@ end AccessContext
 
 def modifyStructure(
     struct: Expression,
-    index: Expression,
-    value: Expression
-): Expression =
+    index: Value,
+    value: Value
+): Value =
   struct match {
     case Dictionary(entries) =>
-      if (entries.foldLeft(false)((acc, e) => acc || e.key == index))
-        Dictionary(
-          entries.map(e =>
-            if (e.key == index) DictionaryEntry(e.key, value) else e
-          )
-        )
-      else
-        Dictionary(entries :+ DictionaryEntry(index, value))
-    case ArrayLiteral(elements) =>
+      entries.put(index, value)
+      Dictionary(entries)
+    case Array(elements) =>
       assert(
         index.isInstanceOf[Number] && index
           .asInstanceOf[Number]
@@ -323,24 +319,26 @@ def modifyStructure(
       assert(v.value == v.value.toInt, "index to array is not an integer")
       var tmp = elements.toArray
       tmp.update(v.value.toInt, value)
-      ArrayLiteral(tmp)
+      Array(tmp)
     case v => assert(false, s"not modifiable structure: $v")
   }
 
 def evalStructAssignment(
     st: StructureAccess,
-    value: Expression,
+    value: Value,
     accessContext: AccessContext,
     scope: Scope
 ): Scope =
-  val Some(struct) = evalExpression(st.identifier, scope).result: @unchecked
-  val Some(index) = evalExpression(st.key, scope).result: @unchecked
+  val Some(struct: Value) =
+    evalExpression(st.identifier, scope).result: @unchecked
+  val Some(index: Value) = evalExpression(st.key, scope).result: @unchecked
   val newStruct = modifyStructure(struct, index, value)
   st.identifier match {
     case id: Identifier =>
       scope.update(id, newStruct)
     case s: StructureAccess =>
-      accessContext.push(s.key, newStruct)
+      val Some(key: Value) = evalExpression(s.key, scope).result: @unchecked
+      accessContext.push(key, newStruct)
       evalStructAssignment(
         s,
         newStruct,
@@ -350,7 +348,8 @@ def evalStructAssignment(
     case struct: (ArrayLiteral | Dictionary) =>
       accessContext.pop() match {
         case Some((_, v)) =>
-          val Some(index) = evalExpression(st.key, scope).result: @unchecked
+          val Some(index: Value) =
+            evalExpression(st.key, scope).result: @unchecked
           val newStruct = modifyStructure(struct, index, v)
           scope.returnExpression(newStruct)
         case None =>
@@ -390,9 +389,10 @@ def evalStatement(
           CallContext.Statement
         )
       case StructuredAssignment(struct, value) =>
+        val Some(v: Value) = evalExpression(value, scope).result: @unchecked
         evalStructAssignment(
           struct,
-          value,
+          v,
           AccessContext(),
           scope
         ).result match {
@@ -483,11 +483,7 @@ def evalExpression(
     case FunctionCall(identifier, callArgs) =>
       evalFunctionCall(identifier, callArgs, scope, CallContext.Expression)
     case BinaryOp(left, op, right) =>
-      val left_result = evalExpression(left, scope)
-      val Some(new_left) = left_result.result: @unchecked
-      val right_result = evalExpression(right, scope)
-      val Some(new_right) = right_result.result: @unchecked
-      evalBinaryOp(op, new_left, new_right, scope)
+      evalBinaryOp(op, left, right, scope)
     case UnaryOp(op, value) =>
       val Some(result) = evalExpression(value, scope).result: @unchecked
       op match {
@@ -535,27 +531,6 @@ def evalExpression(
             case _ =>
               assert(false, s"no structure found by the name '${id.name}'")
           }
-        case Dictionary(entries) =>
-          val result: Option[Expression] = entries.foldLeft(None) {
-            (acc, curr) =>
-              acc match {
-                case None =>
-                  val res = evalExpression(curr.key, scope)
-                  val Some(value) = res.result: @unchecked
-                  val res2 = evalCompareOps(Eq, value, v, scope)
-                  res2.result match {
-                    case Some(Bool(true)) =>
-                      Some(curr.value)
-                    case _ => None
-                  }
-                case r => r
-              }
-          }
-          result match {
-            case Some(value) => scope.returnExpression(value)
-            case None =>
-              assert(false, s"no value found for the key '$v' in a dictionary")
-          }
         case ArrayLiteral(elements) =>
           val Some(value) = evalExpression(v, scope).result: @unchecked
           value match {
@@ -583,22 +558,24 @@ def evalExpression(
         case None =>
           assert(false, s"identifier '$name' does not exist")
       }
-    case value: Number =>
-      scope.returnExpression(value)
-    case StdString(value) =>
-      scope.returnExpression(StdString(value))
-    case Bool(value) =>
-      scope.returnExpression(Bool(value))
-    case Wrapped(value) =>
-      evalExpression(value, scope)
-    case Dictionary(entries) =>
-      scope.returnExpression(Dictionary(entries))
-    case FormatString(value) =>
-      assert(false, "TODO: Format strings in eval implementation")
-    case ArrayLiteral(elements) =>
-      scope.returnExpression(ArrayLiteral(elements))
-    case NoneValue() =>
-      scope.returnExpression(NoneValue())
+    case DictionaryLiteral(entries) =>
+      var map = mutable.HashMap[Value, Value]()
+      val dict = Dictionary(entries.foldLeft(map)((acc, entry) => {
+        val Some(key: Value) =
+          evalExpression(entry.key, scope).result: @unchecked
+        val Some(value: Value) =
+          evalExpression(entry.value, scope).result: @unchecked
+        acc.put(key, value)
+        acc
+      }))
+      scope.returnExpression(dict)
+    case ArrayLiteral(entries) => {
+      scope.returnExpression(Array(entries.map((x) =>
+        val Some(result: Value) = evalExpression(x, scope).result: @unchecked
+        result
+      )))
+    }
+    case value: Value => scope.returnExpression(value)
     case err =>
       assert(false, f"TODO: not implemented '$err'")
   }
@@ -623,13 +600,8 @@ def evalBooleanOps(
     scope: Scope
 ): Scope = {
   // evaluate left and right value
-  val Some(leftEval) = evalExpression(left, scope).result: @unchecked
-  val Some(rightEval) = evalExpression(right, scope).result: @unchecked
-
-  // if left or right is string.
-  if (leftEval.isInstanceOf[Identifier] || rightEval.isInstanceOf[Identifier]) {
-    assert(false, "No boolean operators allowed on strings")
-  }
+  val Some(leftEval: Value) = evalExpression(left, scope).result: @unchecked
+  val Some(rightEval: Value) = evalExpression(right, scope).result: @unchecked
 
   val Some(Bool(valueLeft)) = evalCompareOps(
     NotEq,
@@ -661,8 +633,8 @@ def evalCompareOps(
     scope: Scope
 ): Scope = {
   // evaluate left and right value
-  val Some(leftEval) = evalExpression(left, scope).result: @unchecked
-  val Some(rightEval) = evalExpression(right, scope).result: @unchecked
+  val Some(leftEval: Value) = evalExpression(left, scope).result: @unchecked
+  val Some(rightEval: Value) = evalExpression(right, scope).result: @unchecked
   // if left or right is string.
   (leftEval, rightEval) match {
     case (s1: StdString, s2: StdString) => {
@@ -733,8 +705,8 @@ def evalArithmeticOps(
     scope: Scope
 ): Scope = {
   // evaluate left and right value
-  val Some(leftEval) = evalExpression(left, scope).result: @unchecked
-  val Some(rightEval) = evalExpression(right, scope).result: @unchecked
+  val Some(leftEval: Value) = evalExpression(left, scope).result: @unchecked
+  val Some(rightEval: Value) = evalExpression(right, scope).result: @unchecked
 
   (leftEval, rightEval) match {
     case (s1: StdString, s2: StdString) =>
@@ -786,7 +758,7 @@ def evalArithmeticOps(
 }
 
 // Input: Number or Bool. Output: Double (true == 1, false == 0)
-def extractNumber(value: Expression): Number = value match {
+def extractNumber(value: Value): Number = value match {
   case n: Number   => n
   case Bool(b)     => if (b) YadlInt(1) else YadlInt(0)
   case NoneValue() => YadlInt(0)

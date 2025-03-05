@@ -425,7 +425,7 @@ def formatStringP[$: P]: P[FormatString] = P(
 
 def stringP[$: P]: P[Expression] = formatStringP | stdMultiStringP | stdStringP
 
-def dictionaryEntries[$: P]: P[Dictionary] =
+def dictionaryEntries[$: P]: P[DictionaryLiteral] =
   def dictionaryEntry[$: P]: P[DictionaryEntry] =
     (valueP(identifierP) ~ ws ~ ":" ~ ws ~ valueP(identifierP))
       .opaque("<dictionary entry>")
@@ -437,9 +437,9 @@ def dictionaryEntries[$: P]: P[Dictionary] =
     P((ws ~ entry).rep(sep = (ws ~ "," ~ ws ~ newline.?)))
 
   (ws ~ repeatedEntries(dictionaryEntry) ~/ ws ~ newline.?)
-    .map(Dictionary(_))
+    .map(DictionaryLiteral.apply)
 
-def dictionaryP[$: P]: P[Dictionary] =
+def dictionaryP[$: P]: P[DictionaryLiteral] =
   P("{" ~ ws ~ newline.? ~ dictionaryEntries ~ ws ~ "}")
 
 def openIndex[$: P]: P[Unit] =
