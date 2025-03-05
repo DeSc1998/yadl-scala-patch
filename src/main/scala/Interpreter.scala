@@ -482,8 +482,8 @@ def evalExpression(
       )
     case FunctionCall(identifier, callArgs) =>
       evalFunctionCall(identifier, callArgs, scope, CallContext.Expression)
-    case BinaryOp(left, op, right) =>
-      evalBinaryOp(op, left, right, scope)
+    case BinaryOp(left, op, right) => evalBinaryOp(op, left, right, scope)
+    case Wrapped(value)            => evalExpression(value, scope)
     case UnaryOp(op, value) =>
       val Some(result) = evalExpression(value, scope).result: @unchecked
       op match {
