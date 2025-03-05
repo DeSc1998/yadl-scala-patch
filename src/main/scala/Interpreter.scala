@@ -345,7 +345,7 @@ def evalStructAssignment(
         accessContext,
         scope
       )
-    case struct: (ArrayLiteral | Dictionary) =>
+    case struct: (Array | Dictionary) =>
       accessContext.pop() match {
         case Some((_, v)) =>
           val Some(index: Value) =
@@ -526,12 +526,20 @@ def evalExpression(
           scope.lookup(id) match {
             case Some(d: Dictionary) =>
               evalExpression(StructureAccess(d, v), scope)
-            case Some(a: ArrayLiteral) =>
+            case Some(a: Array) =>
               evalExpression(StructureAccess(a, v), scope)
             case _ =>
               assert(false, s"no structure found by the name '${id.name}'")
           }
-        case ArrayLiteral(elements) =>
+        case Dictionary(entries) => {
+          val Some(index: Value) = evalExpression(v, scope).result: @unchecked
+          val entry = entries.get(index)
+          entry match {
+            case Some(value: Value) => scope.returnExpression(value)
+            case None               => scope.returnExpression(NoneValue())
+          }
+        }
+        case Array(elements) =>
           val Some(value) = evalExpression(v, scope).result: @unchecked
           value match {
             case n: Number => {
@@ -575,6 +583,20 @@ def evalExpression(
         result
       )))
     }
+    case FormatString(segments) =>
+      scope.returnExpression(
+        StdString(
+          segments
+            .map((expr) =>
+              if (!expr.isInstanceOf[StdString])
+                val Some(result: Value) =
+                  evalExpression(expr, scope).result: @unchecked
+                result
+              else expr
+            )
+            .mkString
+        )
+      )
     case value: Value => scope.returnExpression(value)
     case err =>
       assert(false, f"TODO: not implemented '$err'")
