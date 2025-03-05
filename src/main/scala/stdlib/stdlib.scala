@@ -2,14 +2,16 @@ package stdlib
 
 import interpreterdata._
 import scala.annotation.meta.param
+import parser.YadlInt
+import parser.YadlFloat
 
 private type HashMap[K, V] = scala.collection.mutable.HashMap[K, V]
 
 class FunctionContext(
+    val function: CallMatch => parser.Value,
     val params: Int,
-    val optionals: Seq[(String, parser.Value)],
-    val varArgs: Boolean,
-    val function: CallMatch => parser.Value
+    val varArgs: Boolean = false,
+    val optionals: Seq[(String, parser.Value)] = Seq()
 )
 
 class CallMatch(
@@ -49,6 +51,16 @@ def builtinWrite(call_match: CallMatch): parser.Value =
   print(output)
   parser.NoneValue()
 
+def asInteger(call_match: CallMatch): parser.Value =
+  val value = call_match.params(0)
+  if (!value.isInstanceOf[parser.Number])
+    throw IllegalArgumentException("passed value was not a number")
+  value match {
+    case v: YadlInt   => v
+    case YadlFloat(v) => YadlInt(v.toLong)
+    case _            => assert(false, "unreachble")
+  }
+
 /** TODO: we should find a way to add new functions without having to modify
   * this file. But since the interface of the stdlib function wont change we can
   * leave it like this for now. This is THE way to supply prebuild functions to
@@ -58,33 +70,36 @@ def builtinWrite(call_match: CallMatch): parser.Value =
   */
 def builtins: HashMap[String, FunctionContext] = {
   new HashMap[String, FunctionContext]
-    .addOne("print", FunctionContext(0, Seq(), true, builtinPrint))
-    .addOne("write", FunctionContext(0, Seq(), true, builtinWrite))
+    .addOne("print", FunctionContext(builtinPrint, 0, true))
+    .addOne("write", FunctionContext(builtinWrite, 0, true))
+    // ###### type conversion ######
     .addOne(
       "string",
       FunctionContext(
-        1,
-        Seq(),
-        false,
-        (call_match) => toStringObj(call_match.params.head)
+        (call_match) => toStringObj(call_match.params.head),
+        1
       )
     )
     .addOne(
       "number",
       FunctionContext(
-        1,
-        Seq(),
-        false,
-        (call_match) => toNumberObj(call_match.params.head)
+        (call_match) => toNumberObj(call_match.params.head),
+        1
       )
     )
+    .addOne("as_int", FunctionContext(asInteger, 1))
     .addOne(
       "bool",
       FunctionContext(
-        1,
-        Seq(),
-        false,
-        (call_match) => toBooleanObj(call_match.params.head)
+        (call_match) => toBooleanObj(call_match.params.head),
+        1
       )
     )
+    // ###### stirng utilities ######
+    .addOne("split", FunctionContext(stringSplit, 2))
+    .addOne("trim", FunctionContext(stringTrim, 1))
+    .addOne("repeat", FunctionContext(stringRepeat, 2))
+    .addOne("count_substring", FunctionContext(stringCount, 2))
+    .addOne("starts_with", FunctionContext(stringStartsWith, 2))
+    .addOne("ends_with", FunctionContext(stringEndsWith, 2))
 }
