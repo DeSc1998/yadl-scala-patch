@@ -14,8 +14,9 @@ enum ArithmaticOps:
 trait Operator
 trait Expression
 trait Statement
+trait CsvEntry
 trait Value extends Expression
-trait Number extends Value:
+trait Number extends Value, CsvEntry:
   def `+`(other: Number): Number
   def `*`(other: Number): Number
   def `/`(other: Number): Number
@@ -85,7 +86,7 @@ case class YadlInt(value: Long) extends Number:
 
   override def asFloat: Double = value.toDouble
 
-case class Bool(b: Boolean) extends Value:
+case class Bool(b: Boolean) extends Value, CsvEntry:
   override def toString(): String = b.toString
 
 case class BinaryOp(left: Expression, op: Operator, right: Expression)
@@ -93,7 +94,7 @@ case class BinaryOp(left: Expression, op: Operator, right: Expression)
 case class UnaryOp(op: Operator, operant: Expression) extends Expression
 case class Function(args: Seq[String], body: Seq[Statement]) extends Value
 case class Wrapped(value: Expression) extends Expression
-case class StdString(value: String) extends Value:
+case class StdString(value: String) extends Value, CsvEntry:
   override def toString(): String = value.toString
 
 case class FormatString(value: List[Expression]) extends Value
@@ -137,3 +138,5 @@ case class Return(value: Expression) extends Statement
 case class FunctionCall(functionExpr: Expression, args: Seq[Expression])
     extends Expression,
       Statement
+
+class CSV(val header: Option[Seq[String]], val data: Seq[Seq[CsvEntry]])

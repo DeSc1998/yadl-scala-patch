@@ -13,24 +13,31 @@ import parser.{
   Identifier,
   Expression,
   valueP,
-  DictionaryEntry,
+  csvP,
   Dictionary,
-  ArrayLiteral,
-  StdString
+  Array,
+  StdString,
+  Value,
+  NoneValue,
+  YadlFloat,
+  YadlInt,
+  Bool,
+  CsvEntry
 }
+import fastparse.Parsed.Success
+import fastparse.Parsed.Failure
+import org.typelevel.jawn.FailureException
 
-private def loadFunction(params: Seq[DataObject]): DataObject = {
-  if (
-    params.length != 2 || !params(0).isInstanceOf[StringObj] || !params(1)
-      .isInstanceOf[StringObj]
-  ) {
+private def loadFunction(call_match: CallMatch): Value = {
+  val Seq(p, f) = call_match.params.take(2)
+  if (!p.isInstanceOf[StdString] || !f.isInstanceOf[StdString]) {
     throw IllegalArgumentException(
       "Load function expects two string arguments: path and format"
     )
   }
 
-  val path = params(0).asInstanceOf[StringObj].value
-  val format = params(1).asInstanceOf[StringObj].value.toLowerCase
+  val path = p.asInstanceOf[StdString].value
+  val format = f.asInstanceOf[StdString].value
 
   val currentDir = System.getProperty("user.dir")
   val fullPath = Paths.get(currentDir, path).toString
@@ -41,75 +48,48 @@ private def loadFunction(params: Seq[DataObject]): DataObject = {
       val jsonIterator = new JsonIterator(source)
       processJsonIterator(jsonIterator)
     case "lines" =>
-      val iter =
+      val iter: Iterator[Value] =
         source
           .LineIterator()
           .asInstanceOf[Iterator[String]]
-          .map(StringObj(_).asInstanceOf[DataObject])
-      ListObj(ArrayBuffer(iter.toArray*))
+          .map(StdString.apply)
+      Array(iter.toSeq)
+    case "chars" =>
+      StdString(source.mkString)
+
     case "csv" =>
-      parseCSV(source.LineIterator())
+      parse(source.mkString, csvP(using _)) match {
+        case Success(value, _) => csvToDict(value)
+        case _: Failure        => scala.sys.error("failed to parse csv")
+      }
+
     case _ => throw IllegalArgumentException(s"Unsupported format: $format")
   }
 }
 
-def valueParser[$: P]: P[Expression] = P(valueP(identifierP))
-
-private def parseCSV(lineIter: Iterator[String]): DataObject = {
-  val (local, header) = lineIter.duplicate // Thanks Java
-  parseHeader(header) match
-    case Some(value) => {
-      val entry_iter: Iterator[Seq[(Expression, Expression)]] = local
-        .drop(1)
-        .map(line =>
-          value.zip(
-            line
-              .split(",")
-              .map(v =>
-                parse(v, valueParser(using _)) match {
-                  case Parsed.Success(Identifier(name), _) => StdString(name)
-                  case Parsed.Success(v, _)                => v
-                  case e: Parsed.Failure =>
-                    scala.sys.error("failed to parse a value in a csv file")
-                }
-              )
-          )
-        )
-      // val dicts: Iterator[DataObject] = entry_iter
-      //   .map((entry) =>
-      //     Dictionary(
-      //       entry.map { case (key: parser.Value, value: parser.Value) =>
-      //         (key, value)
-      //       }
-      //     )
-      //   )
-      //   .map(toDataObject)
-      // ListObj(ArrayBuffer(dicts.toArray*))
-      ListObj(ArrayBuffer())
+def csvToDict(csv: parser.CSV): Value = csv.header match {
+  case Some(header) => {
+    val h = header.map(StdString.apply)
+    var entries: Seq[Value] = Seq()
+    for (row <- csv.data) {
+      var map = HashMap[Value, Value]()
+      for ((key, value) <- h.zip(row.map(_.asInstanceOf[Value])))
+        map.put(key, value)
+      entries = entries :+ Dictionary(map)
     }
-    case None => {
-      val entry_iter = local
-        .map(line =>
-          line
-            .split(",")
-            .map(v =>
-              parse(v, valueParser(using _)) match {
-                case Parsed.Success(Identifier(name), _) => StdString(name)
-                case Parsed.Success(v, _)                => v
-                case e: Parsed.Failure =>
-                  scala.sys.error("failed to parse a value in a csv file")
-              }
-            )
-            .map {
-              case Identifier(name) =>
-                StdString(name)
-              case v => v
-            }
-        )
-        .map(v => toDataObject(ArrayLiteral(v)))
-      ListObj(ArrayBuffer(entry_iter.toArray*))
-    }
+    Array(entries)
+  }
+  case None =>
+    Array(
+      csv.data.map((row) => Array(row.map(_.asInstanceOf[Value])))
+    )
 }
+
+def valueParser[$: P]: P[Value] = P(
+  valueP(identifierP)
+    .filter(!_.isInstanceOf[Value])
+    .map(_.asInstanceOf[Value])
+)
 
 private def parseHeader(lineIter: Iterator[String]): Option[Seq[Expression]] = {
   val iter = lineIter.filter(line =>
@@ -142,8 +122,8 @@ private def parseHeader(lineIter: Iterator[String]): Option[Seq[Expression]] = {
   } else None
 }
 
-private def processJsonIterator(iterator: JsonIterator): DataObject = {
-  val result = HashMap[String, DataObject]()
+private def processJsonIterator(iterator: JsonIterator): Value = {
+  val result = HashMap[String, Value]()
 
   while (iterator.hasNext) {
     iterator.next() match {
@@ -159,26 +139,30 @@ private def processJsonIterator(iterator: JsonIterator): DataObject = {
 }
 
 private def convertToProperStructure(
-    map: HashMap[String, DataObject]
-): DataObject = {
+    map: HashMap[String, Value]
+): Value = {
   if (map.keys.forall(_.matches("""\[\d+\]"""))) {
     val sortedEntries = map.toSeq
       .sortBy { case (key, _) =>
         key.substring(1, key.length - 1).toInt
       }
       .map(_._2)
-    ListObj(ArrayBuffer(sortedEntries*))
+    Array(sortedEntries)
   } else {
-    DictionaryObj(map.map { case (k, v) => StringObj(k) -> v })
+    Dictionary(map.map { case (k, v) => StdString(k) -> v })
   }
 }
 
-private def convertJsonExpression(value: Any): DataObject = {
+private def convertJsonExpression(value: Any): Value = {
   value match {
-    case null | None      => NoneObj()
-    case b: Boolean       => BooleanObj(b)
-    case n: BigDecimal    => NumberObj(n.toDouble)
-    case s: String        => StringObj(s)
+    case null | None => NoneValue()
+    case b: Boolean  => Bool(b)
+    case n: BigDecimal =>
+      if (n.isValidInt)
+        YadlInt(n.toLong)
+      else
+        YadlFloat(n.toDouble)
+    case s: String        => StdString(s)
     case it: JsonIterator => processJsonIterator(it)
     case other =>
       throw IllegalArgumentException(

@@ -101,4 +101,7 @@ def builtins: HashMap[String, FunctionContext] = {
     .addOne("count_substring", FunctionContext(stringCount, 2))
     .addOne("starts_with", FunctionContext(stringStartsWith, 2))
     .addOne("ends_with", FunctionContext(stringEndsWith, 2))
+    // ###### processing functions ######
+    // ###### IO Operations ######
+    .addOne("load", FunctionContext(loadFunction, 2))
 }

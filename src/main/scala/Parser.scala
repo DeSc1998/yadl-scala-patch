@@ -101,7 +101,7 @@ def valueP[$: P](idParser: => P[Expression]): P[Expression] =
     idParser
   ) | numberP
 
-def booleanP[$: P]: P[Expression] = P(
+def booleanP[$: P]: P[Bool] = P(
   ("true" | "false").!
 ).opaque("<boolean value>").map {
   case "true"  => Bool(true)
@@ -470,3 +470,29 @@ def arrayLiteralP[$: P]: P[ArrayLiteral] =
     ) ~ ws ~ newline.? ~ "]"
   )
     .map(ArrayLiteral.apply)
+
+def csvP[$: P]: P[CSV] =
+  ((csvHeader ~ ws ~ newline).? ~ csvDataRow.rep(sep = "\n"))
+    .map((header, rows) => CSV(header, rows.take(rows.size - 1)))
+
+def csvHeader[$: P]: P[Seq[String]] =
+  csvEntry
+    .rep(sep = (ws ~ "," ~ ws))
+    .filter((heading) =>
+      heading.foldLeft(true)((acc, value) =>
+        acc && value.isInstanceOf[StdString]
+      )
+    )
+    .map((heading) => heading.map(_.asInstanceOf[StdString].value))
+
+def csvDataRow[$: P]: P[Seq[CsvEntry]] =
+  P(csvEntry.rep(sep = (ws ~ "," ~ ws)))
+
+def csvEntry[$: P]: P[CsvEntry] =
+  booleanP | numberP | csvStringP
+
+def csvStringP[$: P]: P[StdString] =
+  (P("\"" ~ CharPred(_ != '"').rep.! ~ "\"") | P(
+    CharPred((x) => x != ',' && x != '\n').rep.!
+  ))
+    .map(StdString.apply)
