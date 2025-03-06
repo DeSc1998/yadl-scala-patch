@@ -3,6 +3,7 @@ import java.io.*
 import java.{util => ju}
 
 import parser.yadlParser
+import interpreter.{Scope, evalStatement}
 
 // Thank you Java (-_-)
 def readFileContent(filepath: String): String =

@@ -1,3 +1,5 @@
+package interpreter
+
 import parser.*
 import ArithmaticOps.{Add, Div, Expo, Mod, Mul, Sub}
 import BooleanOps.{And, Not, Or}

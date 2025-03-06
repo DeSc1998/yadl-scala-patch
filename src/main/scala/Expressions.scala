@@ -36,8 +36,13 @@ case class BooleanOp(op: BooleanOps) extends Operator
 case class NoneValue() extends Value:
   override def toString(): String =
     "none"
-case class YadlIterator()
-    extends Value // TODO: add all necessary values in here
+case class YadlIterator(
+    val next_fn: Seq[Value] => (Value, Seq[Value]),
+    val has_next_fn: Seq[Value] => Boolean,
+    val peek_fn: Option[Seq[Value] => Value],
+    var data: Seq[Value]
+) extends Value
+
 case class Identifier(name: String) extends Expression
 case class YadlFloat(value: Double) extends Number:
   override def toString(): String = value.toString

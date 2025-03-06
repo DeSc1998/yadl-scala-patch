@@ -149,12 +149,12 @@ def toDataObject(value: Expression): DataObject =
         Seq(),
         None,
         (params: Seq[DataObject]) => {
-          val scope = _root_.`<empty>`.Scope()
-          val newScope = _root_.`<empty>`.evalFunctionCall(
+          val scope = interpreter.Scope()
+          val newScope = interpreter.evalFunctionCall(
             x,
             params.map(x => toAstNode(x)),
             scope,
-            _root_.`<empty>`.CallContext.Expression
+            interpreter.CallContext.Expression
           )
           newScope.result match {
             case None    => NONE // TODO

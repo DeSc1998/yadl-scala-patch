@@ -102,6 +102,7 @@ def builtins: HashMap[String, FunctionContext] = {
     .addOne("starts_with", FunctionContext(stringStartsWith, 2))
     .addOne("ends_with", FunctionContext(stringEndsWith, 2))
     // ###### processing functions ######
+    .addOne("map", FunctionContext(mapBuiltIn, 2))
     // ###### IO Operations ######
     .addOne("load", FunctionContext(loadFunction, 2))
 }
