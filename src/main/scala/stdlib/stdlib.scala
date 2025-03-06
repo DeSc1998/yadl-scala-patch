@@ -103,6 +103,27 @@ def builtins: HashMap[String, FunctionContext] = {
     .addOne("ends_with", FunctionContext(stringEndsWith, 2))
     // ###### processing functions ######
     .addOne("map", FunctionContext(mapBuiltIn, 2))
+    .addOne("len", FunctionContext(lenBuiltIn, 1))
     // ###### IO Operations ######
     .addOne("load", FunctionContext(loadFunction, 2))
+    // ###### iterator Operations ######
+    .addOne(
+      "default_iterator",
+      FunctionContext(
+        (call_match) => {
+          val Seq(list) = call_match.params.take(1)
+          iteratorOf(list) match {
+            case Some(iter) => iter
+            case _ =>
+              throw IllegalArgumentException(
+                "in default_iterator: argument can not be iterated"
+              )
+          }
+        },
+        1
+      )
+    )
+    .addOne("iterator", FunctionContext(iteratorBuiltIn, 3))
+    .addOne("has_next", FunctionContext(iteratorHasNext, 1))
+    .addOne("next", FunctionContext(iteratorNext, 1))
 }

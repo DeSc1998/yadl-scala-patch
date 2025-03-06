@@ -7,6 +7,7 @@ import scala.collection.mutable
 import scala.util.boundary, boundary.break
 import parser.YadlIterator
 import parser.NoneValue
+import parser.Bool
 
 private def filterBuiltIn(params: Seq[DataObject]): DataObject = {
   if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
@@ -317,21 +318,12 @@ private def zipBuiltIn(params: Seq[DataObject]): IteratorObj = {
   new IteratorObj(nextFn, hasNextFn, data)
 }
 
-private def lenBuiltIn(params: Seq[DataObject]): NumberObj = {
-  if (params.length > 1) {
-    throw IllegalArgumentException()
+private def lenBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items) = call_match.params.take(1)
+  items match {
+    case Array(elements) => YadlInt(elements.size.toLong)
+    case _: Value        => YadlInt(0)
   }
-
-  val d = DictionaryObj(mutable.HashMap[DataObject, DataObject]())
-  val it = toIteratorObj(params(0))
-  var len = 0
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val nextElement = it.next.function(Seq(it.data))
-    len = len + 1
-  }
-  val result = NumberObj(len)
-  result
 }
 
 private def groupByBuiltIn(params: Seq[DataObject]): DataObject = {
@@ -418,6 +410,32 @@ def applyRuntime(fn: parser.Function, args: Seq[Value]): Value =
     case Some(value: Value) => value
     case _                  => NoneValue()
   }
+
+private def iteratorBuiltIn(call_match: CallMatch): Value = {
+  val Seq(next_fn: parser.Function, has_next_fn: parser.Function, data: Value) =
+    call_match.params.take(3): @unchecked
+  val iter_next: Seq[Value] => (Value, Seq[Value]) = (data) =>
+    val value = applyRuntime(next_fn, data)
+    (value, data)
+
+  val iter_has_next: Seq[Value] => Boolean = (data) =>
+    val Bool(value) = applyRuntime(has_next_fn, data): @unchecked
+    value
+
+  YadlIterator(iter_next, iter_has_next, None, Seq(data))
+}
+
+private def iteratorHasNext(call_match: CallMatch): Value = {
+  val Seq(iter: YadlIterator) = call_match.params.take(1): @unchecked
+  Bool(iter.has_next_fn(iter.data))
+}
+
+private def iteratorNext(call_match: CallMatch): Value = {
+  var Seq(iter: YadlIterator) = call_match.params.take(1): @unchecked
+  val (value, data) = iter.next_fn(iter.data)
+  iter.data = data
+  value
+}
 
 def iteratorOf(value: Value): Option[YadlIterator] =
   value match {
