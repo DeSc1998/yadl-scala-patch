@@ -103,6 +103,7 @@ def builtins: HashMap[String, FunctionContext] = {
     .addOne("ends_with", FunctionContext(stringEndsWith, 2))
     // ###### processing functions ######
     .addOne("map", FunctionContext(mapBuiltIn, 2))
+    .addOne("do", FunctionContext(mapBuiltIn, 2))
     .addOne("len", FunctionContext(lenBuiltIn, 1))
     // ###### IO Operations ######
     .addOne("load", FunctionContext(loadFunction, 2))
