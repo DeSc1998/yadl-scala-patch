@@ -412,10 +412,13 @@ private def mapBuiltIn(call_match: CallMatch): Value = {
 }
 
 def applyRuntime(fn: parser.Function, args: Seq[Value]): Value =
-  var scope =
-    interpreter.Scope(interpreter.Scope(), fn.args, args)
-  val eval = interpreter.evalStatement
-  val evaled = fn.body.foldLeft(scope)(eval)
+  var scope = interpreter.Scope(interpreter.Scope())
+  val evaled = interpreter.evalFunctionCall(
+    fn,
+    args,
+    scope,
+    interpreter.CallContext.Expression
+  )
   evaled.result match {
     case Some(value: Value) => value
     case _                  => NoneValue()
