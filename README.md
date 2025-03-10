@@ -14,12 +14,12 @@ has_freezing_days = (city) => {
     return check_any(city, (item) => item["temp"] < 0)
 }
 
-print3("Has Bern freezing days?: " + has_freezing_days(bern))
-print3("Has Bern not freezing days?: " + check_all(bern, (item) => item["temp"] < 0)) // use function in print-statement
-print3("Is Bern the best city?: idk, im a computer")
+print("Has Bern freezing days?: ",  has_freezing_days(bern))
+print("Has Bern not freezing days?: ", check_all(bern, (item) => item["temp"] < 0)) // use function in print-statement
+print("Is Bern the best city?: idk, im a computer")
 
 // find continuous data with a while-loop and if/else
-print3("Has Bern continuous data?:")
+print("Has Bern continuous data?:")
 index = 1
 continuous_data = true
 while (index < len(bern) and continuous_data) {
@@ -29,7 +29,7 @@ while (index < len(bern) and continuous_data) {
     
     index = index + 1
 }
-print3(continuous_data)
+print(continuous_data)
 ```
 
 ## Table of Contents
@@ -71,7 +71,7 @@ This code from the example uses one:
 has_freezing_days = (city) => {
     return check_any(city, (item) => item["temp"] < 0)
 }
-print3("Is it freezing?", has_freezing_days(bern)
+print("Is it freezing?", has_freezing_days(bern))
 ```
 Notice this line: `check_any(city, (item) => item["temp"] < 0)` <br>
 Right there, we use the anonymous function `(item) => item["temp"] < 0)` which returns true, if attribute "temp" of the passed object "item" is below 0. <br>
@@ -79,7 +79,7 @@ Is this example, it is passed to one of our in-built function from the standard 
 
 But we can also immediately call anonymous functions instead:
 ```js
-print3("2 + 1:", ((a,b) => a+b)(2,1))
+print("2 + 1:", ((a,b) => a+b)(2,1))
 ```
 
 ### Common bugs: <a name="bugs"></a>
