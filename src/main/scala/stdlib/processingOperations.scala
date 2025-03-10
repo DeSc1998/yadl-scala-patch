@@ -318,6 +318,33 @@ private def zipBuiltIn(params: Seq[DataObject]): IteratorObj = {
   new IteratorObj(nextFn, hasNextFn, data)
 }
 
+private def sortBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, compare: parser.Function) =
+    call_match.params.take(2): @unchecked
+  items match {
+    case Array(xs) =>
+      Array(xs.sortWith((x, y) => {
+        var scope = interpreter.Scope()
+        val Some(result) = interpreter
+          .evalFunctionCall(
+            compare,
+            Seq(x, y),
+            scope,
+            interpreter.CallContext.Expression
+          )
+          .result: @unchecked
+        result match {
+          case Bool(b) => b
+          case _ =>
+            throw IllegalArgumentException(
+              "compare function did not return boolean"
+            )
+        }
+      }))
+    case v => throw NotImplementedError(v.toString())
+  }
+}
+
 private def lenBuiltIn(call_match: CallMatch): Value = {
   val Seq(items) = call_match.params.take(1)
   items match {
@@ -352,46 +379,29 @@ private def groupByBuiltIn(params: Seq[DataObject]): DataObject = {
   result
 }
 
-private def reduceBuiltIn(params: Seq[DataObject]): DataObject = {
-  if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
-    throw IllegalArgumentException()
+private def reduceBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, callable: parser.Function) =
+    call_match.params.take(2): @unchecked
+
+  items match {
+    case Array(xs) =>
+      xs.drop(1)
+        .foldLeft(xs(0))((acc, x) => applyRuntime(callable, Seq(acc, x)))
   }
-
-  val reduceFn = params(1).asInstanceOf[FunctionObj]
-  val it = toIteratorObj(params(0))
-
-  if (!it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    throw IllegalArgumentException("Cannot reduce an empty iterable")
-  }
-
-  var accumulator = it.next.function(Seq(it.data))
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val item = it.next.function(Seq(it.data))
-    accumulator = reduceFn.function(Seq(accumulator, item))
-  }
-
-  accumulator
 }
 
 private def mapBuiltIn(call_match: CallMatch): Value = {
-  val Seq(items, fn) = call_match.params.take(2)
-  if (fn.isInstanceOf[FunctionObj]) {
-    throw new IllegalArgumentException(
-      "map function expects an iterable and a function"
-    )
-  }
+  val Seq(items, fn: parser.Function) = call_match.params.take(2): @unchecked
 
-  val mapFn = fn.asInstanceOf[parser.Function]
   items match {
     case Array(elems) =>
-      Array(elems.map((x: Value) => applyRuntime(mapFn, Seq(x))))
+      Array(elems.map((x: Value) => applyRuntime(fn, Seq(x))))
     case iterator: YadlIterator =>
       val nextFn = (data: Seq[Value]) => {
         val iter: YadlIterator = data(0).asInstanceOf[YadlIterator]
         val (value: Value, new_data: Seq[Value]) =
           iter.next_fn(iter.data): @unchecked
-        val mapped: Value = applyRuntime(mapFn, Seq(value))
+        val mapped: Value = applyRuntime(fn, Seq(value))
         (mapped, new_data)
       }
 
@@ -455,4 +465,3 @@ def iteratorOf(value: Value): Option[YadlIterator] =
       Some(YadlIterator(nextFn, hasNextFn, None, data))
     case _: Value => None
   }
-
