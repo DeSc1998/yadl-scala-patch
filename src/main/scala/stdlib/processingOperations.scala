@@ -341,6 +341,23 @@ private def reduceBuiltIn(call_match: CallMatch): Value = {
   }
 }
 
+private def flattenBuiltIn(call_match: CallMatch): Value = {
+  var Seq(items) = call_match.params.take(1)
+  items match {
+    case Array(xs) =>
+      Array(
+        xs.foldLeft(Seq())((acc, x) =>
+          x match {
+            case Array(values) => acc :++ values
+            case v             => acc :+ v
+          }
+        )
+      )
+
+    case v => throw NotImplementedError(v.getClass.getName())
+  }
+}
+
 private def mapBuiltIn(call_match: CallMatch): Value = {
   val Seq(items, callalbe) = call_match.params.take(2)
   assert(

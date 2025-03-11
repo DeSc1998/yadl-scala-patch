@@ -111,6 +111,7 @@ def builtins: HashMap[String, FunctionContext] = {
     .addOne("check_any", FunctionContext(check_anyBuiltIn, 2))
     .addOne("check_none", FunctionContext(check_noneBuiltIn, 2))
     .addOne("len", FunctionContext(lenBuiltIn, 1))
+    .addOne("flatten", FunctionContext(flattenBuiltIn, 1))
     // ###### IO Operations ######
     .addOne("load", FunctionContext(loadFunction, 2))
     // ###### iterator Operations ######
