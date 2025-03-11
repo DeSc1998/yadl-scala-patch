@@ -8,67 +8,37 @@ import scala.util.boundary, boundary.break
 import parser.YadlIterator
 import parser.NoneValue
 import parser.Bool
-import scala.annotation.meta.param
+import java.rmi.UnexpectedException
 
-private def filterBuiltIn(params: Seq[DataObject]): DataObject = {
-  if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
-    throw IllegalArgumentException()
+private def groupByBuiltin(call_match: CallMatch): Value = {
+  val Seq(items, callable) = call_match.params.take(2)
+  assert(
+    callable.isInstanceOf[parser.Function],
+    "in group_by: second argument is not a function"
+  )
+  val groupper = callable.asInstanceOf[parser.Function]
+  items match {
+    case Array(xs) =>
+      val uniques = xs.map((x) => applyRuntime(groupper, Seq(x))).distinct
+      val entries =
+        uniques
+          .map((x) => {
+            (
+              x,
+              Array(xs.filter((y) => {
+                val r = applyRuntime(groupper, Seq(y))
+                var s = interpreter.Scope()
+                val Some(result) = interpreter
+                  .evalCompareOps(parser.CompareOps.Eq, r, x, s)
+                  .result: @unchecked
+                result.asInstanceOf[parser.Bool].b
+              }))
+            )
+          })
+      var out = mutable.HashMap[Value, Value]()
+      parser.Dictionary(out.addAll(entries))
+    case v => throw NotImplementedError(v.getClass.getName())
   }
-
-  val filterFn = params(1).asInstanceOf[FunctionObj]
-
-  // We can cheat and just don't use the the data attribute of the
-  // iterator, since it can't be accessed by the language in the
-  // first place.
-  val d = DictionaryObj(mutable.HashMap[DataObject, DataObject]())
-
-  val it = toIteratorObj(params(0))
-  var buffer: DataObject = NONE
-  var hasBuffer = false
-
-  val hasnext = FunctionObj(
-    Seq("d"),
-    Seq(),
-    None,
-    (d: Seq[DataObject]) => {
-      if (hasBuffer) {
-        TRUE
-      }
-
-      boundary {
-        while (
-          it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value
-        ) {
-          val n = it.next.function(Seq(it.data))
-
-          if (filterFn.function(Seq(n)).asInstanceOf[BooleanObj].value) {
-            buffer = n
-            hasBuffer = true
-            break(TRUE)
-          }
-        }
-        FALSE
-      }
-    }
-  )
-
-  val next = FunctionObj(
-    Seq("d"),
-    Seq(),
-    None,
-    (d: Seq[DataObject]) => {
-      if (hasBuffer) {
-        hasBuffer = false
-        buffer
-      } else if (hasnext.function(d).asInstanceOf[BooleanObj].value) {
-        hasBuffer = false
-        buffer
-      } else {
-        throw IllegalArgumentException()
-      }
-    }
-  )
-  IteratorObj(next, hasnext, d)
 }
 
 private def check_helper(
@@ -305,32 +275,6 @@ private def lenBuiltIn(call_match: CallMatch): Value = {
   }
 }
 
-private def groupByBuiltIn(params: Seq[DataObject]): DataObject = {
-  if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
-    throw IllegalArgumentException()
-  }
-
-  val groupByFn = params(1).asInstanceOf[FunctionObj]
-  val it = toIteratorObj(params(0))
-  val result = new DictionaryObj(
-    scala.collection.mutable.HashMap[DataObject, DataObject]()
-  )
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val item = it.next.function(Seq(it.data))
-    val key = groupByFn.function(Seq(item))
-
-    if (!result.value.contains(key)) {
-      result.value(key) = new ListObj(
-        scala.collection.mutable.ArrayBuffer[DataObject]()
-      )
-    }
-    result.value(key).asInstanceOf[ListObj].value.append(item)
-  }
-
-  result
-}
-
 private def reduceBuiltIn(call_match: CallMatch): Value = {
   val Seq(items, callable: parser.Function) =
     call_match.params.take(2): @unchecked
@@ -355,6 +299,30 @@ private def flattenBuiltIn(call_match: CallMatch): Value = {
         )
       )
 
+    case v => throw NotImplementedError(v.getClass.getName())
+  }
+}
+
+private def filterBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, callable) = call_match.params.take(2)
+  assert(
+    callable.isInstanceOf[parser.Function],
+    "in filter: second argument is not a function"
+  )
+  val fn = callable.asInstanceOf[parser.Function]
+  items match {
+    case Array(xs) =>
+      Array(xs.filter((x) => {
+        val result = applyRuntime(fn, Seq(x))
+        result match {
+          case Bool(b) => b
+          case v =>
+            throw UnexpectedException(
+              "in filter: expected result of type bool but got " + v.getClass
+                .getName()
+            )
+        }
+      }))
     case v => throw NotImplementedError(v.getClass.getName())
   }
 }
