@@ -205,27 +205,36 @@ private def lastBuiltIn(params: Seq[DataObject]): DataObject = {
   }
 }
 
-private def countBuiltIn(params: Seq[DataObject]): NumberObj = {
-  if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
-    throw IllegalArgumentException()
+private def countBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, callable) = call_match.params.take(2)
+  assert(
+    callable.isInstanceOf[parser.Function],
+    "second argument is not a function"
+  )
+  val predicate = callable.asInstanceOf[parser.Function]
+  items match {
+    case Array(xs) =>
+      val bools = xs.map((x) => applyRuntime(predicate, Seq(x)))
+      YadlInt(
+        bools.foldLeft(0)((acc, x) =>
+          x match {
+            case Bool(true) => acc + 1
+            case _          => acc
+          }
+        )
+      )
+    case Dictionary(entries) =>
+      val count = entries.values
+        .map((x) => applyRuntime(predicate, Seq(x)))
+        .foldLeft(0)((acc, x) =>
+          x match {
+            case Bool(true) => acc + 1
+            case _          => acc
+          }
+        )
+      YadlInt(count)
+    case v => throw NotImplementedError(v.toString())
   }
-
-  val d = DictionaryObj(mutable.HashMap[DataObject, DataObject]())
-
-  val checkFn = params(1).asInstanceOf[FunctionObj]
-  val it = toIteratorObj(params(0))
-  var count = 0
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val nextElement = it.next.function(Seq(it.data))
-    val checkResult =
-      checkFn.function(Seq(nextElement)).asInstanceOf[BooleanObj].value
-    if (checkResult) {
-      count = count + 1
-    }
-  }
-  val result = NumberObj(count)
-  result
 }
 
 private def doBuiltIn(params: Seq[DataObject]): IteratorObj = {

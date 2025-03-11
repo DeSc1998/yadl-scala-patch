@@ -106,6 +106,7 @@ def builtins: HashMap[String, FunctionContext] = {
     .addOne("reduce", FunctionContext(reduceBuiltIn, 2))
     .addOne("sort", FunctionContext(sortBuiltIn, 2))
     .addOne("do", FunctionContext(mapBuiltIn, 2))
+    .addOne("count", FunctionContext(countBuiltIn, 2))
     .addOne("len", FunctionContext(lenBuiltIn, 1))
     // ###### IO Operations ######
     .addOne("load", FunctionContext(loadFunction, 2))
