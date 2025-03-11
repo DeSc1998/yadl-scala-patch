@@ -8,6 +8,7 @@ import scala.util.boundary, boundary.break
 import parser.YadlIterator
 import parser.NoneValue
 import parser.Bool
+import scala.annotation.meta.param
 
 private def filterBuiltIn(params: Seq[DataObject]): DataObject = {
   if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
@@ -382,6 +383,19 @@ private def mapBuiltIn(call_match: CallMatch): Value = {
     case _: Value =>
       throw IllegalArgumentException("in map: provided value is not a sequence")
   }
+}
+
+private def flatmapBuiltIn(call_match: CallMatch): Value = {
+  val res = mapBuiltIn(call_match)
+  val _new = call_match.params.updated(0, res)
+  flattenBuiltIn(
+    CallMatch(
+      _new,
+      call_match.optionals,
+      call_match.varArgs,
+      call_match.context
+    )
+  )
 }
 
 def applyRuntime(fn: parser.Function, args: Seq[Value]): Value =
