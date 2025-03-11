@@ -205,6 +205,12 @@ private def lastBuiltIn(params: Seq[DataObject]): DataObject = {
   }
 }
 
+private def firstIfTrue[T](condition: Value, on_true: T, on_false: T): T =
+  condition match {
+    case Bool(true) => on_true
+    case _          => on_false
+  }
+
 private def countBuiltIn(call_match: CallMatch): Value = {
   val Seq(items, callable) = call_match.params.take(2)
   assert(
@@ -216,22 +222,12 @@ private def countBuiltIn(call_match: CallMatch): Value = {
     case Array(xs) =>
       val bools = xs.map((x) => applyRuntime(predicate, Seq(x)))
       YadlInt(
-        bools.foldLeft(0)((acc, x) =>
-          x match {
-            case Bool(true) => acc + 1
-            case _          => acc
-          }
-        )
+        bools.foldLeft(0)((acc, x) => firstIfTrue(x, acc + 1, acc))
       )
     case Dictionary(entries) =>
       val count = entries.values
         .map((x) => applyRuntime(predicate, Seq(x)))
-        .foldLeft(0)((acc, x) =>
-          x match {
-            case Bool(true) => acc + 1
-            case _          => acc
-          }
-        )
+        .foldLeft(0)((acc, x) => firstIfTrue(x, acc + 1, acc))
       YadlInt(count)
     case v => throw NotImplementedError(v.toString())
   }
