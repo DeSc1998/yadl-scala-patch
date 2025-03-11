@@ -233,41 +233,6 @@ private def countBuiltIn(call_match: CallMatch): Value = {
   }
 }
 
-private def doBuiltIn(params: Seq[DataObject]): IteratorObj = {
-  if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
-    throw new IllegalArgumentException()
-  }
-
-  val fn = params(1).asInstanceOf[FunctionObj]
-  val it = toIteratorObj(params(0)).asInstanceOf[IteratorObj]
-
-  // Create a buffer to store the results
-  val results = mutable.Buffer[DataObject]()
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val nextElement = it.next.function(Seq(it.data))
-    val result = fn.function(Seq(nextElement))
-    results += result
-  }
-
-  // Create a new iterator for the results
-  val newIt = results.iterator
-
-  // Functions to wrap the new iterator
-  val hasNextFn =
-    new FunctionObj(Seq(), Seq(), None, _ => BooleanObj(newIt.hasNext))
-  val nextFn = new FunctionObj(
-    Seq(),
-    Seq(),
-    None,
-    _ => if (newIt.hasNext) newIt.next() else NoneObj()
-  )
-  val data = DictionaryObj(mutable.HashMap())
-
-  // Return the new IteratorObj
-  new IteratorObj(nextFn, hasNextFn, data)
-}
-
 private def zipBuiltIn(params: Seq[DataObject]): IteratorObj = {
   // Check if there are exactly two parameters and both are iterators
   if (params.length != 2) {
