@@ -86,7 +86,7 @@ private def check_helper(
             case _       => acc
           }
         )
-    case v => throw NotImplementedError(v.toString())
+    case v => throw NotImplementedError(v.getClass.getName())
   }
 
 private def check_allBuiltIn(call_match: CallMatch): Value = {
@@ -111,7 +111,7 @@ private def check_noneBuiltIn(call_match: CallMatch): Value = {
   val Seq(items, fn) = call_match.params.take(2)
   assert(
     fn.isInstanceOf[parser.Function],
-    "in check_all: second argument is not a function"
+    "in check_none: second argument is not a function"
   )
   Bool(
     !check_helper(items, fn.asInstanceOf[parser.Function], false, { _ || _ })
@@ -214,7 +214,7 @@ private def countBuiltIn(call_match: CallMatch): Value = {
         .map((x) => applyRuntime(predicate, Seq(x)))
         .foldLeft(0)((acc, x) => firstIfTrue(x, acc + 1, acc))
       YadlInt(count)
-    case v => throw NotImplementedError(v.toString())
+    case v => throw NotImplementedError(v.getClass.getName())
   }
 }
 
@@ -274,20 +274,16 @@ private def zipBuiltIn(params: Seq[DataObject]): IteratorObj = {
 }
 
 private def sortBuiltIn(call_match: CallMatch): Value = {
-  val Seq(items, compare: parser.Function) =
-    call_match.params.take(2): @unchecked
+  val Seq(items, callable) = call_match.params.take(2)
+  assert(
+    callable.isInstanceOf[parser.Function],
+    "in sort: second argument is not a function"
+  )
+  val compare = callable.asInstanceOf[parser.Function]
   items match {
     case Array(xs) =>
       Array(xs.sortWith((x, y) => {
-        var scope = interpreter.Scope()
-        val Some(result) = interpreter
-          .evalFunctionCall(
-            compare,
-            Seq(x, y),
-            scope,
-            interpreter.CallContext.Expression
-          )
-          .result: @unchecked
+        val result = applyRuntime(compare, Seq(x, y))
         result match {
           case Bool(b) => b
           case _ =>
@@ -346,7 +342,12 @@ private def reduceBuiltIn(call_match: CallMatch): Value = {
 }
 
 private def mapBuiltIn(call_match: CallMatch): Value = {
-  val Seq(items, fn: parser.Function) = call_match.params.take(2): @unchecked
+  val Seq(items, callalbe) = call_match.params.take(2)
+  assert(
+    callalbe.isInstanceOf[parser.Function],
+    "in map: second argument is not a function"
+  )
+  val fn = callalbe.asInstanceOf[parser.Function]
 
   items match {
     case Array(elems) =>
