@@ -70,67 +70,52 @@ private def filterBuiltIn(params: Seq[DataObject]): DataObject = {
   IteratorObj(next, hasnext, d)
 }
 
-private def check_allBuiltIn(params: Seq[DataObject]): BooleanObj = {
-  if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
-    throw IllegalArgumentException()
+private def check_helper(
+    items: Value,
+    fn: parser.Function,
+    initial: Boolean,
+    bin_op: (Boolean, Boolean) => Boolean
+): Boolean =
+  items match {
+    case Array(xs) =>
+      xs
+        .map((x) => applyRuntime(fn, Seq(x)))
+        .foldLeft(initial)((acc, x) =>
+          x match {
+            case Bool(b) => bin_op(b, acc)
+            case _       => acc
+          }
+        )
+    case v => throw NotImplementedError(v.toString())
   }
 
-  val d = DictionaryObj(mutable.HashMap[DataObject, DataObject]())
-
-  val checkFn = params(1).asInstanceOf[FunctionObj]
-  val it = toIteratorObj(params(0))
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val nextElement = it.next.function(Seq(it.data))
-    val checkResult =
-      checkFn.function(Seq(nextElement)).asInstanceOf[BooleanObj].value
-    if (!checkResult) {
-      return FALSE
-    }
-  }
-  TRUE
+private def check_allBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, fn) = call_match.params.take(2)
+  assert(
+    fn.isInstanceOf[parser.Function],
+    "in check_all: second argument is not a function"
+  )
+  Bool(check_helper(items, fn.asInstanceOf[parser.Function], true, { _ && _ }))
 }
 
-private def check_anyBuiltIn(params: Seq[DataObject]): BooleanObj = {
-  if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
-    throw IllegalArgumentException()
-  }
-
-  val d = DictionaryObj(mutable.HashMap[DataObject, DataObject]())
-
-  val checkFn = params(1).asInstanceOf[FunctionObj]
-  val it = toIteratorObj(params(0))
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val nextElement = it.next.function(Seq(it.data))
-    val checkResult =
-      checkFn.function(Seq(nextElement)).asInstanceOf[BooleanObj].value
-    if (checkResult) {
-      return TRUE
-    }
-  }
-  FALSE
+private def check_anyBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, fn) = call_match.params.take(2)
+  assert(
+    fn.isInstanceOf[parser.Function],
+    "in check_all: second argument is not a function"
+  )
+  Bool(check_helper(items, fn.asInstanceOf[parser.Function], false, { _ || _ }))
 }
 
-private def check_noneBuiltIn(params: Seq[DataObject]): BooleanObj = {
-  if (params.length != 2 || !params(1).isInstanceOf[FunctionObj]) {
-    throw IllegalArgumentException()
-  }
-
-  val d = DictionaryObj(mutable.HashMap[DataObject, DataObject]())
-
-  val checkFn = params(1).asInstanceOf[FunctionObj]
-  val it = toIteratorObj(params(0))
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val nextElement = it.next.function(Seq(it.data))
-    val checkResult =
-      checkFn.function(Seq(nextElement)).asInstanceOf[BooleanObj].value
-    if (checkResult) {
-      return FALSE
-    }
-  }
-  TRUE
+private def check_noneBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, fn) = call_match.params.take(2)
+  assert(
+    fn.isInstanceOf[parser.Function],
+    "in check_all: second argument is not a function"
+  )
+  Bool(
+    !check_helper(items, fn.asInstanceOf[parser.Function], false, { _ || _ })
+  )
 }
 
 private def firstBuiltIn(params: Seq[DataObject]): DataObject = {
