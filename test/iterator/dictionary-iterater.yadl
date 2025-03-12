@@ -11,6 +11,7 @@ while (has_next(iter)) {
     print(next(iter))
 }
 
+// NOTE: key value entries may not be in order of definition
 // CHECK-OUT: {value: false, key: second}
 // CHECK-OUT: {value: 14, key: third}
 // CHECK-OUT: {value: [1, 2, 3], key: first}
