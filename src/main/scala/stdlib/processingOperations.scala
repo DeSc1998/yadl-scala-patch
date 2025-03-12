@@ -273,14 +273,18 @@ private def mapBuiltIn(call_match: CallMatch): Value = {
       Array(elems.map((x: Value) => applyRuntime(fn, Seq(x))))
     case iterator: YadlIterator =>
       val nextFn = (data: Seq[Value]) => {
-        val iter: YadlIterator = data(0).asInstanceOf[YadlIterator]
+        val Seq(iter: YadlIterator) = data.take(1): @unchecked
         val (value: Value, new_data: Seq[Value]) =
           iter.next_fn(iter.data): @unchecked
         val mapped: Value = applyRuntime(fn, Seq(value))
-        (mapped, new_data)
+        iter.data = new_data
+        (mapped, Seq(iter))
       }
+      val hasNextFn = (data: Seq[Value]) =>
+        val Seq(iter: YadlIterator) = data.take(1): @unchecked
+        iter.has_next_fn(iter.data)
 
-      YadlIterator(nextFn, iterator.has_next_fn, None, Seq(iterator))
+      YadlIterator(nextFn, hasNextFn, None, Seq(iterator))
     case _: Value =>
       throw IllegalArgumentException("in map: provided value is not a sequence")
   }
@@ -313,26 +317,36 @@ def applyRuntime(fn: parser.Function, args: Seq[Value]): Value =
   }
 
 private def iteratorBuiltIn(call_match: CallMatch): Value = {
-  val Seq(next_fn: parser.Function, has_next_fn: parser.Function, data: Value) =
+  val Seq(next_fn: parser.Function, has_next_fn: parser.Function, data) =
     call_match.params.take(3): @unchecked
-  val iter_next: Seq[Value] => (Value, Seq[Value]) = (data) =>
+  val iter_next = (data: Seq[Value]) =>
     val value = applyRuntime(next_fn, data)
     (value, data)
 
-  val iter_has_next: Seq[Value] => Boolean = (data) =>
-    val Bool(value) = applyRuntime(has_next_fn, data): @unchecked
-    value
+  val iter_has_next = (data: Seq[Value]) =>
+    val result = applyRuntime(has_next_fn, data): @unchecked
+    firstIfTrue(result, true, false)
 
   YadlIterator(iter_next, iter_has_next, None, Seq(data))
 }
 
 private def iteratorHasNext(call_match: CallMatch): Value = {
-  val Seq(iter: YadlIterator) = call_match.params.take(1): @unchecked
+  var Seq(it) = call_match.params.take(1)
+  assert(
+    it.isInstanceOf[YadlIterator],
+    "in next: argument is not an iterator"
+  )
+  val iter = it.asInstanceOf[YadlIterator]
   Bool(iter.has_next_fn(iter.data))
 }
 
 private def iteratorNext(call_match: CallMatch): Value = {
-  var Seq(iter: YadlIterator) = call_match.params.take(1): @unchecked
+  var Seq(it) = call_match.params.take(1)
+  assert(
+    it.isInstanceOf[YadlIterator],
+    "in next: argument is not an iterator"
+  )
+  val iter = it.asInstanceOf[YadlIterator]
   val (value, data) = iter.next_fn(iter.data)
   iter.data = data
   value
@@ -340,6 +354,7 @@ private def iteratorNext(call_match: CallMatch): Value = {
 
 def iteratorOf(value: Value): Option[YadlIterator] =
   value match {
+    case i: YadlIterator => Some(i)
     case a: Array =>
       val data = Seq(YadlInt(0), a)
       val hasNextFn = (data: Seq[Value]) => {
