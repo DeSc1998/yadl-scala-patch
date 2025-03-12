@@ -113,7 +113,7 @@ private def lastBuiltIn(call_match: CallMatch): Value = {
   val Seq(items, callable, default) = call_match.params.take(3)
   assert(
     callable.isInstanceOf[parser.Function],
-    "in first: second argument is not a function"
+    "in last: second argument is not a function"
   )
   val fn = callable.asInstanceOf[parser.Function]
   items match {
@@ -342,6 +342,33 @@ def iteratorOf(value: Value): Option[YadlIterator] =
   value match {
     case a: Array =>
       val data = Seq(YadlInt(0), a)
+      val hasNextFn = (data: Seq[Value]) => {
+        val Seq(index: YadlInt, array: Array) = data: @unchecked
+        index.value < array.elements.size
+      }
+      val nextFn: Seq[Value] => (Value, Seq[Value]) = (data: Seq[Value]) => {
+        val Seq(index: YadlInt, array: Array) = data: @unchecked
+        if (index.value < array.elements.size) {
+          val tmp = array.elements(index.value.toInt)
+          (tmp, Seq(YadlInt(index.value + 1), array))
+        } else (NoneValue(), data)
+      }
+      Some(YadlIterator(nextFn, hasNextFn, None, data))
+    case d: Dictionary =>
+      // TODO: avoid copying of all entries
+      val items = Array(
+        d.entries
+          .map((p: (Value, Value)) =>
+            import parser.StdString
+            val (x, y) = p
+            Dictionary(
+              mutable
+                .HashMap((StdString("key") -> x), (StdString("value") -> y))
+            )
+          )
+          .toSeq
+      )
+      val data = Seq(YadlInt(0), items)
       val hasNextFn = (data: Seq[Value]) => {
         val Seq(index: YadlInt, array: Array) = data: @unchecked
         index.value < array.elements.size

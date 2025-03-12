@@ -1,0 +1,16 @@
+// RUN: DEFAULT
+
+dict = {
+    "first": [1, 2, 3],
+    "second": false,
+    "third": 14
+}
+iter = default_iterator( dict )
+
+while (has_next(iter)) {
+    print(next(iter))
+}
+
+// CHECK-OUT: {value: false, key: second}
+// CHECK-OUT: {value: 14, key: third}
+// CHECK-OUT: {value: [1, 2, 3], key: first}
