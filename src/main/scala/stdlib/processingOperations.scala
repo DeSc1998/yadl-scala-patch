@@ -89,75 +89,43 @@ private def check_noneBuiltIn(call_match: CallMatch): Value = {
   )
 }
 
-private def firstBuiltIn(params: Seq[DataObject]): DataObject = {
-  if (
-    params.length < 1 || params.length > 3 || !params(1)
-      .isInstanceOf[FunctionObj]
-  ) {
-    throw new IllegalArgumentException
-  }
-
-  val it = toIteratorObj(params(0)).asInstanceOf[IteratorObj]
-  val fn =
-    if (params.length > 1 && params(1).isInstanceOf[FunctionObj])
-      Some(params(1).asInstanceOf[FunctionObj])
-    else None
-  val default = if (params.length == 3) Some(params(2)) else None
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val nextElement = it.next.function(Seq(it.data))
-    if (
-      fn.isEmpty || fn.get
-        .function(Seq(nextElement))
-        .asInstanceOf[BooleanObj]
-        .value
-    ) {
-      return nextElement
-    }
-  }
-
-  default.getOrElse(
-    throw new NoSuchElementException("No element satisfies the condition")
+private def firstBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, callable, default) = call_match.params.take(3)
+  assert(
+    callable.isInstanceOf[parser.Function],
+    "in first: second argument is not a function"
   )
+  val fn = callable.asInstanceOf[parser.Function]
+  items match {
+    case Array(xs) =>
+      xs.find((x) =>
+        val result = applyRuntime(fn, Seq(x))
+        firstIfTrue(result, true, false)
+      ) match {
+        case Some(v) => v
+        case None    => default
+      }
+    case v => throw NotImplementedError(v.getClass.getName())
+  }
 }
 
-private def lastBuiltIn(params: Seq[DataObject]): DataObject = {
-  if (
-    params.length < 1 || params.length > 3 || !params(1)
-      .isInstanceOf[FunctionObj]
-  ) {
-    throw new IllegalArgumentException
-  }
-
-  val it = toIteratorObj(params(0)).asInstanceOf[IteratorObj]
-  val fn =
-    if (params.length > 1 && params(1).isInstanceOf[FunctionObj])
-      Some(params(1).asInstanceOf[FunctionObj])
-    else None
-  val default = if (params.length == 3) Some(params(2)) else None
-
-  var lastElement: DataObject = default.getOrElse(UndefinedObj())
-  var found = false
-
-  while (it.hasNext.function(Seq(it.data)).asInstanceOf[BooleanObj].value) {
-    val nextElement = it.next.function(Seq(it.data))
-    if (
-      fn.isEmpty || fn.get
-        .function(Seq(nextElement))
-        .asInstanceOf[BooleanObj]
-        .value
-    ) {
-      lastElement = nextElement
-      found = true
-    }
-  }
-
-  if (found) {
-    lastElement
-  } else {
-    default.getOrElse(
-      throw new NoSuchElementException("No element satisfies the condition")
-    )
+private def lastBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items, callable, default) = call_match.params.take(3)
+  assert(
+    callable.isInstanceOf[parser.Function],
+    "in first: second argument is not a function"
+  )
+  val fn = callable.asInstanceOf[parser.Function]
+  items match {
+    case Array(xs) =>
+      xs.findLast((x) =>
+        val result = applyRuntime(fn, Seq(x))
+        firstIfTrue(result, true, false)
+      ) match {
+        case Some(v) => v
+        case None    => default
+      }
+    case v => throw NotImplementedError(v.getClass.getName())
   }
 }
 
@@ -189,59 +157,24 @@ private def countBuiltIn(call_match: CallMatch): Value = {
   }
 }
 
-private def zipBuiltIn(params: Seq[DataObject]): IteratorObj = {
-  // Check if there are exactly two parameters and both are iterators
-  if (params.length != 2) {
-    throw new IllegalArgumentException(
-      "zipBuiltIn expects exactly two parameters"
-    )
+private def zipBuiltIn(call_match: CallMatch): Value = {
+  val Seq(items_left, items_right) = call_match.params.take(2)
+  (items_left, items_right) match {
+    case (Array(xs), Array(ys)) =>
+      val min_size = scala.math.min(xs.size, ys.size)
+      Array(
+        xs.take(min_size)
+          .zip(ys.take(min_size))
+          .map((p: (Value, Value)) => {
+            val (x, y) = p
+            Array(Seq(x, y))
+          })
+      )
+    case (v1, v2) =>
+      throw NotImplementedError(
+        v1.getClass.getName() + " and " + v2.getClass.getName()
+      )
   }
-
-  // Extract the iterators
-  val it1 = toIteratorObj(params(0)).asInstanceOf[IteratorObj]
-  val it2 = toIteratorObj(params(1)).asInstanceOf[IteratorObj]
-
-  // Initialize an empty ArrayBuffer to store the zipped results
-  val zippedResults = mutable.ArrayBuffer.empty[mutable.ArrayBuffer[DataObject]]
-
-  // Iterate until either iterator is empty
-  while (
-    it1.hasNext.function(Seq(it1.data)).asInstanceOf[BooleanObj].value &&
-    it2.hasNext.function(Seq(it2.data)).asInstanceOf[BooleanObj].value
-  ) {
-    // Collect elements from each iterator into an ArrayBuffer
-    val tuple = mutable.ArrayBuffer(
-      it1.next.function(Seq(it1.data)),
-      it2.next.function(Seq(it2.data))
-    )
-    zippedResults += tuple
-  }
-
-  // Convert zippedResults to an iterator
-  val newIt = zippedResults.iterator
-
-  // Functions to wrap the new iterator
-  val hasNextFn =
-    new FunctionObj(Seq(), Seq(), None, _ => BooleanObj(newIt.hasNext))
-  val nextFn = new FunctionObj(
-    Seq(),
-    Seq(),
-    None,
-    _ => {
-      if (newIt.hasNext) {
-        val nextTuple = newIt.next()
-        ListObj(
-          nextTuple
-        ) // Wrap nextTuple in ListObj (which expects ArrayBuffer)
-      } else {
-        NoneObj()
-      }
-    }
-  )
-  val data = DictionaryObj(mutable.HashMap())
-
-  // Return the new IteratorObj
-  new IteratorObj(nextFn, hasNextFn, data)
 }
 
 private def sortBuiltIn(call_match: CallMatch): Value = {

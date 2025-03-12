@@ -34,7 +34,12 @@ def matchCall(
     )
   } else if (call_args.length == context.params) {
     CallMatch(call_args, Seq(), Seq(), context)
-  } else throw IllegalArgumentException("Not enough arguments")
+  } else if (context.varArgs)
+    throw IllegalArgumentException("Not enough arguments")
+  else
+    throw IllegalArgumentException(
+      s"called function needs ${context.params} argument(s) but got ${call_args.size}"
+    )
 
 def builtinPrint(call_match: CallMatch): parser.Value =
   val output = call_match.varArgs
@@ -103,6 +108,9 @@ def builtins: HashMap[String, FunctionContext] = {
     .addOne("ends_with", FunctionContext(stringEndsWith, 2))
     // ###### processing functions ######
     .addOne("map", FunctionContext(mapBuiltIn, 2))
+    .addOne("first", FunctionContext(firstBuiltIn, 3))
+    .addOne("last", FunctionContext(lastBuiltIn, 3))
+    .addOne("zip", FunctionContext(zipBuiltIn, 2))
     .addOne("group_by", FunctionContext(groupByBuiltin, 2))
     .addOne("flatmap", FunctionContext(flatmapBuiltIn, 2))
     .addOne("filter", FunctionContext(filterBuiltIn, 2))
