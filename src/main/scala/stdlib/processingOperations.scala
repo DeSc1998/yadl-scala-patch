@@ -216,6 +216,20 @@ private def reduceBuiltIn(call_match: CallMatch): Value = {
     case Array(xs) =>
       xs.drop(1)
         .foldLeft(xs(0))((acc, x) => applyRuntime(callable, Seq(acc, x)))
+
+    case iter: YadlIterator => {
+      var acc: Value = NoneValue()
+      var cond = firstIfTrue(iter_has_next(iter), true, false)
+      while (cond) {
+        val value = iter_next(iter)
+        if (acc.isInstanceOf[NoneValue])
+          acc = value
+        else
+          acc = applyRuntime(callable, Seq(acc, value))
+        cond = firstIfTrue(iter_has_next(iter), true, false)
+      }
+      acc
+    }
   }
 }
 
@@ -337,7 +351,7 @@ private def iteratorHasNext(call_match: CallMatch): Value = {
     "in next: argument is not an iterator"
   )
   val iter = it.asInstanceOf[YadlIterator]
-  Bool(iter.has_next_fn(iter.data))
+  iter_has_next(iter)
 }
 
 private def iteratorNext(call_match: CallMatch): Value = {
@@ -347,10 +361,16 @@ private def iteratorNext(call_match: CallMatch): Value = {
     "in next: argument is not an iterator"
   )
   val iter = it.asInstanceOf[YadlIterator]
+  iter_next(iter)
+}
+
+private def iter_next(iter: YadlIterator): Value =
   val (value, data) = iter.next_fn(iter.data)
   iter.data = data
   value
-}
+
+private def iter_has_next(iter: YadlIterator): Value =
+  Bool(iter.has_next_fn(iter.data))
 
 def iteratorOf(value: Value): Option[YadlIterator] =
   value match {
