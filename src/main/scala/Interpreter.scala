@@ -7,7 +7,6 @@ import CompareOps.{Eq, Greater, GreaterEq, Less, LessEq, NotEq}
 import scala.collection.mutable.Stack
 import scala.annotation.unused
 import scala.collection.mutable
-import java.{util => ju}
 
 val builtins = stdlib.builtins
 

@@ -153,6 +153,18 @@ private def countBuiltIn(call_match: CallMatch): Value = {
         .map((x) => applyRuntime(predicate, Seq(x)))
         .foldLeft(0)((acc, x) => firstIfTrue(x, acc + 1, acc))
       YadlInt(count)
+    case it: YadlIterator => {
+      var iter = iter_clone(it)
+      var acc = 0
+      var cond = firstIfTrue(iter_has_next(iter), true, false)
+      while (cond) {
+        val value = iter_next(iter)
+        val tmp = applyRuntime(predicate, Seq(value))
+        acc = firstIfTrue(tmp, acc + 1, acc)
+        cond = firstIfTrue(iter_has_next(iter), true, false)
+      }
+      YadlInt(acc.toLong)
+    }
     case v => throw NotImplementedError(v.getClass.getName())
   }
 }
@@ -371,6 +383,17 @@ private def iter_next(iter: YadlIterator): Value =
 
 private def iter_has_next(iter: YadlIterator): Value =
   Bool(iter.has_next_fn(iter.data))
+
+// TODO: BROKEN!! copying of sequence is not preformed which is required here
+private def iter_clone(iter: YadlIterator): YadlIterator =
+  val tmp =
+    iter.data
+      .collect((x) =>
+        if (x.isInstanceOf[YadlIterator])
+          iter_clone(x.asInstanceOf[YadlIterator])
+        else x
+      )
+  YadlIterator(iter.next_fn, iter.has_next_fn, iter.peek_fn, tmp)
 
 def iteratorOf(value: Value): Option[YadlIterator] =
   value match {
