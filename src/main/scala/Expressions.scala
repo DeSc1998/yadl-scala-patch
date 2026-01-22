@@ -100,16 +100,14 @@ case class UnaryOp(op: Operator, operant: Expression) extends Expression
 case class Function(args: Seq[String], body: Seq[Statement]) extends Value
 case class Wrapped(value: Expression) extends Expression
 case class StdString(value: String) extends Value, CsvEntry:
-  override def toString(): String = value.toString
+  override def toString(): String = value
 
 case class FormatString(value: List[Expression]) extends Value
 class DictionaryEntry(var key: Expression, var value: Expression):
   override def toString(): String = key.toString + ": " + value.toString
 
 case class DictionaryLiteral(val entries: Seq[DictionaryEntry])
-    extends Expression:
-  override def toString(): String =
-    "{" + entries.mkString(", ") + "}"
+    extends Expression
 
 case class Dictionary(val entries: HashMap[Value, Value]) extends Value:
   override def toString(): String =
@@ -117,9 +115,7 @@ case class Dictionary(val entries: HashMap[Value, Value]) extends Value:
       .map { case (key, value) => key.toString + ": " + value.toString }
       .mkString(", ") + "}"
 
-case class ArrayLiteral(val elements: Seq[Expression]) extends Expression:
-  override def toString(): String =
-    "[" + elements.mkString(", ") + "]"
+case class ArrayLiteral(val elements: Seq[Expression]) extends Expression
 
 case class Array(val elements: Seq[Value]) extends Value:
   override def toString(): String =
