@@ -101,22 +101,14 @@ def booleanP[$: P]: P[Bool] = P(
   case _       => assert(false, "unreachable")
 }
 
-def functionCallArgsP[$: P]: P[Seq[Expression]] = (
-  expression(identifierP, 0) ~ (ws ~ "," ~ ws ~ functionCallArgsP).?
-).map((v, vs) =>
-  vs match {
-    case None     => Seq(v)
-    case Some(xs) => v +: xs
-  }
-)
+def functionCallArgsP[$: P]: P[Seq[Expression]] =
+  expression(identifierP, 0).rep(sep = (ws ~ "," ~ ws))
 
 def functionName[$: P](idParser: => P[Expression]): P[Expression] =
   idParser | wrappedExpression(idParser)
 
 def functionCallManyArgs[$: P]: P[Seq[Seq[Expression]]] =
-  P(ws ~ "(" ~ ws ~ functionCallArgsP.? ~ ws ~ ")")
-    .map(_.getOrElse(Seq()))
-    .rep
+  P(ws ~ "(" ~ ws ~ functionCallArgsP ~ ws ~ ")").rep
 
 def functionCallExpression[$: P](idParser: => P[Expression]): P[Expression] = P(
   functionName(idParser) ~ functionCallManyArgs
