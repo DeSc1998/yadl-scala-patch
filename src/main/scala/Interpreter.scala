@@ -762,6 +762,7 @@ def typeOf(value: Value): String =
     case _: Dictionary => "dictionary"
     case _: Array      => "array"
     case _: Function   => "function"
+    case _: NoneValue  => "none"
     case _             => "'not defined'"
   }
 
