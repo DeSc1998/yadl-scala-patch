@@ -710,13 +710,23 @@ def evalCompareOps(
 
       scope.returnExpression(Bool(result)) // Adding the result to the scope
     }
-    case (v1, v2) =>
-      // TODO: handling these cases properly
+    case (v1: (Dictionary | NoneValue), v2: (Dictionary | NoneValue)) => {
+      val result = if (v1.isInstanceOf[NoneValue]) {
+        v2.asInstanceOf[Dictionary].entries.isEmpty
+      } else if (v2.isInstanceOf[NoneValue]) {
+        v1.asInstanceOf[Dictionary].entries.isEmpty
+      } else {
+        val dict1 = v1.asInstanceOf[Dictionary]
+        val dict2 = v2.asInstanceOf[Dictionary]
+        dict1.entries == dict2.entries
+      }
       op match {
         case Eq =>
-          scope.returnExpression(Bool(false)) // Adding the result to the scope
+          scope.returnExpression(Bool(result)) // Adding the result to the scope
         case NotEq =>
-          scope.returnExpression(Bool(true)) // Adding the result to the scope
+          scope.returnExpression(
+            Bool(!result)
+          ) // Adding the result to the scope
         case op =>
           val type_v1 = typeOf(v1)
           val type_v2 = typeOf(v2)
@@ -725,6 +735,22 @@ def evalCompareOps(
             s"the values '$v1'($type_v1) and '$v2'($type_v2) are not comparable under '$op'"
           )
       }
+    }
+    case (array1: Array, array2: Array) => {
+      val eql_size = array1.elements.length == array2.elements.length
+      if (eql_size) {
+        val pairs = array1.elements.zip(array2.elements)
+        val result = pairs.foldLeft(true)((acc, item: (Value, Value)) => {
+          val result = evalCompareOps(op, item._1, item._2, scope).result.get
+          assert(result.isInstanceOf[Bool])
+          acc && result.asInstanceOf[Bool].b
+        })
+        scope.returnExpression(Bool(result))
+      } else {
+        scope.returnExpression(Bool(false))
+      }
+    }
+    case _ => scope.returnExpression(Bool(false))
   }
 }
 
