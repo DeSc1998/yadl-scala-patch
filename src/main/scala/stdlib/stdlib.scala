@@ -1,8 +1,8 @@
 package stdlib
 
 import interpreterdata._
-import parser.YadlInt
-import parser.YadlFloat
+import parser.{YadlInt, YadlFloat, StdString}
+import interpreter.typeOf
 
 private type HashMap[K, V] = scala.collection.mutable.HashMap[K, V]
 
@@ -139,6 +139,16 @@ def builtins: HashMap[String, FunctionContext] = {
                 "in default_iterator: argument can not be iterated"
               )
           }
+        },
+        1
+      )
+    )
+    .addOne(
+      "type",
+      FunctionContext(
+        (call_match) => {
+          val Seq(value) = call_match.params.take(1)
+          StdString(typeOf(value))
         },
         1
       )
