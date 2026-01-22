@@ -125,6 +125,7 @@ def builtins: HashMap[String, FunctionContext] = {
     .addOne("flatten", FunctionContext(flattenBuiltIn, 1))
     // ###### IO Operations ######
     .addOne("load", FunctionContext(loadFunction, 2))
+    .addOne("save", FunctionContext(save, 3))
     // ###### iterator Operations ######
     .addOne(
       "default_iterator",

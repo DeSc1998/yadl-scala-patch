@@ -2,6 +2,7 @@ package stdlib
 
 import scala.io.Source
 import java.nio.file.Paths
+import java.io.{File, PrintWriter}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.immutable
 
@@ -65,6 +66,66 @@ private def loadFunction(call_match: CallMatch): Value = {
 
     case _ => throw IllegalArgumentException(s"Unsupported format: $format")
   }
+}
+
+def save(call_match: CallMatch): Value = {
+  val Seq(value, p, f) = call_match.params.take(3): @unchecked
+  if (!p.isInstanceOf[StdString] || !f.isInstanceOf[StdString]) {
+    throw IllegalArgumentException(
+      "Load function expects two string arguments: path and format"
+    )
+  }
+  val path = p.asInstanceOf[StdString]
+  val format = f.asInstanceOf[StdString]
+  var writer = PrintWriter(File(path.value))
+  format.value match {
+    case "json" => {
+      writer.write(s"$value")
+    }
+    case "csv" => {
+      value match {
+        case dict: Dictionary => {
+          val keys = dict.entries.keys
+          writer.write(keys.mkString(","))
+          writer.write("\n")
+          writer.write(dict.entries.values.mkString(","))
+          writer.write("\n")
+        }
+        case Array(elements) => {
+          assert(!elements.isEmpty) // TODO: handle this case
+          val none_dict = elements.foldLeft(true)((acc, item) =>
+            acc && !item.isInstanceOf[Dictionary]
+          )
+          val all_dict = elements.foldLeft(true)((acc, item) =>
+            acc && item.isInstanceOf[Dictionary]
+          )
+          if (none_dict || !all_dict) {
+            writer.write(elements.mkString("\n"))
+            writer.write("\n")
+          } else {
+            // NOTE: we assume all Dictionaries have the same keys
+            val first = elements.head.asInstanceOf[Dictionary]
+            val keys = first.entries.keys
+            writer.write(keys.mkString(","))
+            writer.write("\n")
+            elements.map((item) => {
+              val dict = item.asInstanceOf[Dictionary]
+              val out = keys.map({
+                dict.entries.getOrElse(_, Some(StdString("")))
+              })
+              writer.write(out.mkString(","))
+              writer.write("\n")
+            })
+          }
+        }
+        case v => assert(false, s"saving as CSV: Not implemented for $v")
+      }
+    }
+    case format =>
+      assert(false, s"saving as CSV: Not supported for format '$format'")
+  }
+  writer.close
+  NoneValue()
 }
 
 def csvToDict(csv: parser.CSV): Value = csv.header match {
