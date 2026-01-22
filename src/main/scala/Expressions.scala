@@ -97,7 +97,8 @@ case class Bool(b: Boolean) extends Value, CsvEntry:
 case class BinaryOp(left: Expression, op: Operator, right: Expression)
     extends Expression
 case class UnaryOp(op: Operator, operant: Expression) extends Expression
-case class Function(args: Seq[String], body: Seq[Statement]) extends Value
+case class Function(args: (Seq[String], Option[String]), body: Seq[Statement])
+    extends Value
 case class Wrapped(value: Expression) extends Expression
 case class StdString(value: String) extends Value, CsvEntry:
   override def toString(): String = value

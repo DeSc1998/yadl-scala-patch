@@ -74,23 +74,15 @@ def codeBlock[$: P]: P[Seq[Statement]] =
 def functionDefBodyP[$: P]: P[Seq[Statement]] =
   codeBlock | expression(identifierP, 0).map((v) => Seq(Return(v)))
 
-def functionDefArgsP[$: P]: P[Seq[String]] = (
-  identifierP ~ (ws ~ "," ~ ws ~ functionDefArgsP).?
-).map((i, is) =>
-  (i, is) match {
-    case (Identifier(n), Some(args)) => n +: args
-    case (Identifier(n), None)       => Seq(n)
+def functionDefArgsP[$: P]: P[(Seq[String], Option[String])] =
+  (identifierP.!.rep(sep = (ws ~ "," ~ ws)) ~ (ws ~ "...".!).?).map {
+    case (args, Some(_)) => (args.take(args.length - 1), Some(args.last))
+    case (args, None)    => (args, None)
   }
-)
 
 def functionDefP[$: P]: P[Expression] = (
-  "(" ~ ws ~ functionDefArgsP.? ~ ws ~ ")" ~ ws ~ "=>" ~ ws ~ functionDefBodyP
-).map((bs, b) =>
-  bs match {
-    case Some(args) => Function(args, b)
-    case None       => Function(Seq(), b)
-  }
-)
+  "(" ~ ws ~ functionDefArgsP ~ ws ~ ")" ~ ws ~ "=>" ~ ws ~ functionDefBodyP
+).map((named, var_arg, body) => Function((named, var_arg), body))
 
 def noneP[$: P]: P[Expression] = P("none").!.map(_ => NoneValue())
 

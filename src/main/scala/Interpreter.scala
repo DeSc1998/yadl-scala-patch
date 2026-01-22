@@ -15,16 +15,20 @@ type MutArray[V] = scala.collection.mutable.ArrayBuffer[V]
 
 class Scope(
     parent: Scope = null,
-    funArgs: Seq[String] = Seq(),
-    callArgs: Seq[Expression] = Seq()
+    funArgs: (Seq[String], Option[String]) = (Seq(), None),
+    callArgs: Seq[Value] = Seq()
 ):
   private var parentScope: Scope = parent
-  private var _result: Expression = null
-  private var localVars: HashMap[String, Expression] =
-    new HashMap().addAll(funArgs.zip(callArgs))
+  private var _result: Value = null
+  private var localVars: HashMap[String, Value] = {
+    val named = funArgs._1.zip(callArgs)
+    val var_arg =
+      funArgs._2.map((arg) => (arg, Array(callArgs.drop(funArgs._1.length))))
+    new HashMap().addAll(named :++ var_arg.toSeq)
+  }
   private var localFuncs: HashMap[String, parser.Function] = new HashMap
 
-  def result: Option[Expression] =
+  def result: Option[Value] =
     if (this._result == null) None
     else
       val tmp = this._result
@@ -34,11 +38,11 @@ class Scope(
   def hasResult: Boolean = this._result != null
   def isGlobal: Boolean = this.parentScope == null
 
-  def returnExpression(value: Expression): Scope =
+  def returnExpression(value: Value): Scope =
     this._result = value
     this
 
-  def lookup(identifier: Identifier): Option[Expression] =
+  def lookup(identifier: Identifier): Option[Value] =
     this.localVars
       .get(identifier.name)
       .filter {
@@ -54,7 +58,7 @@ class Scope(
       case None                         => lookupFunctionInParent(identifier)
     }
 
-  private def lookupInParent(identifier: Identifier): Option[Expression] =
+  private def lookupInParent(identifier: Identifier): Option[Value] =
     if (this.parentScope != null)
       this.parentScope.lookup(identifier)
     else None
@@ -67,15 +71,22 @@ class Scope(
     else
       None
 
-  def update(identifier: Identifier, value: Expression): Scope =
+  def update(identifier: Identifier, value: Value): Scope =
     value match {
       case f: Function =>
         this.lookupFunction(identifier) match {
           case None =>
             this.localFuncs.update(identifier.name, f)
           case Some(func: Function) =>
+            val named = f.args._2 match {
+              case Some(arg) => f.args._1 :+ arg
+              case None      => f.args._1
+            }
             val tmp =
-              Function(f.args, captureExternals(this, f.args, f.body))
+              Function(
+                f.args,
+                captureExternals(this, named, f.body)
+              )
             this.localFuncs.update(identifier.name, f)
         }
       case v: Expression =>
@@ -105,7 +116,11 @@ def captureExternalsExpression(
       val fas = args.map(captureExternalsExpression(_, locals, scope))
       FunctionCall(fx, fas)
     case Function(args, body) =>
-      val ls = locals.clone().appendAll(args)
+      val named = args._2 match {
+        case Some(arg) => args._1 :+ arg
+        case None      => args._1
+      }
+      val ls = locals.clone().appendAll(named)
       val b = body.map(captureExternalsStatement(_, locals, scope))
       Function(args, b)
     case ArrayLiteral(elements) =>
@@ -199,12 +214,7 @@ def evalFunctionCall(
         print("\n")
         scope
       } else if (builtins.contains(identifier)) {
-        val callArgsNew: Seq[Value] = evaledCallArgs.map { value =>
-          value match {
-            case v: Value => v
-            case _        => assert(false, "unreachable")
-          }
-        }
+        val callArgsNew: Seq[Value] = evaledCallArgs
         val Some(call_context) = builtins.get(identifier): @unchecked
         val call_match = stdlib.matchCall(callArgsNew, call_context)
         val result = call_context.function(call_match)
@@ -240,7 +250,7 @@ def evalFunctionCall(
     case Function(args, body) =>
       val res =
         body.foldLeft(Scope(scope, args, evaledCallArgs))(evalStatement)
-      val Some(value) = res.result: @unchecked
+      val value = res.result.orElse(Some(NoneValue())).get
       if (context == CallContext.Expression)
         scope.returnExpression(value)
       else scope
@@ -250,7 +260,7 @@ def evalFunctionCall(
         evalFunctionCall(functionExpr, args, scope, context).result: @unchecked
       val res =
         body1.foldLeft(Scope(scope, args1, evaledCallArgs))(evalStatement)
-      val Some(value) = res.result: @unchecked
+      val value = res.result.orElse(Some(NoneValue())).get
       if (context == CallContext.Expression)
         scope.returnExpression(value)
       else scope
@@ -272,8 +282,12 @@ def evalReturn(value: Expression, scope: Scope): Scope =
         }
 
       case f: Function =>
+        val named = f.args._2 match {
+          case Some(arg) => f.args._1 :+ arg
+          case None      => f.args._1
+        }
         val tmp =
-          Function(f.args, captureExternals(scope, f.args, f.body))
+          Function(f.args, captureExternals(scope, named, f.body))
         scope.returnExpression(f)
       case va =>
         scope.result match {
@@ -478,8 +492,12 @@ def evalExpression(
 ): Scope =
   v match {
     case Function(args, body) =>
+      val named = args._2 match {
+        case Some(arg) => args._1 :+ arg
+        case None      => args._1
+      }
       scope.returnExpression(
-        Function(args, captureExternals(scope, args, body))
+        Function(args, captureExternals(scope, named, body))
       )
     case FunctionCall(identifier, callArgs) =>
       evalFunctionCall(identifier, callArgs, scope, CallContext.Expression)
@@ -710,15 +728,15 @@ def evalCompareOps(
   }
 }
 
-def typeOf(value: Expression): String =
+def typeOf(value: Value): String =
   value match {
     case _: StdString  => "string"
     case _: Number     => "number"
     case _: Bool       => "bool"
     case _: Dictionary => "dictionary"
-    // case _: ArrayLiteral => "array"
-    case _: Function => "function"
-    case _           => "'not defined'"
+    case _: Array      => "array"
+    case _: Function   => "function"
+    case _             => "'not defined'"
   }
 
 def evalArithmeticOps(

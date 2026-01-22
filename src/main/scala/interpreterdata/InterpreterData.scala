@@ -145,9 +145,9 @@ def toDataObject(value: Expression): DataObject =
     case x: Function => {
       // TODO add optionals
       FunctionObj(
-        x.args,
+        x.args._1,
         Seq(),
-        None,
+        x.args._2,
         (params: Seq[DataObject]) => {
           val scope = interpreter.Scope()
           val newScope = interpreter.evalFunctionCall(
