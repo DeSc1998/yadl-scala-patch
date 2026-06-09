@@ -2,13 +2,15 @@ import munit.FunSuite
 import scala.io.Source
 import jsoniterator.JsonIterator
 
-class JsonParsing extends FunSuite{
+class JsonParsing extends FunSuite {
   test("JsonIterator should correctly handle simple JSON objects") {
     val json = """{"name":"John", "age":30}"""
     val iterator = new JsonIterator(Source.fromString(json))
     val results = iterator.toList
-    print(results)
-    assertEquals(results, List(Right("name", "John"), Right("age", BigDecimal(30))))
+    assertEquals(
+      results,
+      List(Right("name", "John"), Right("age", BigDecimal(30)))
+    )
   }
 
   test("JsonIterator should gracefully handle empty JSON objects") {
@@ -31,32 +33,47 @@ class JsonParsing extends FunSuite{
     assert(objResult.isRight, "Expected Right for empty object")
     objResult match {
       case Right(("emptyObj", subIterator: JsonIterator)) =>
-        assert(!subIterator.hasNext, "Iterator for empty object should have no next elements")
+        assert(
+          !subIterator.hasNext,
+          "Iterator for empty object should have no next elements"
+        )
       case _ => fail("Expected a JsonIterator for the empty object")
     }
     val arrResult = iterator.next()
     assert(arrResult.isRight, "Expected Right for empty array")
     arrResult match {
       case Right(("emptyArr", subIterator: JsonIterator)) =>
-        assert(!subIterator.hasNext, "Iterator for empty array should have no next elements")
+        assert(
+          !subIterator.hasNext,
+          "Iterator for empty array should have no next elements"
+        )
       case _ => fail("Expected a JsonIterator for the empty array")
     }
   }
 
-  test("next should throw NoSuchElementException when there are no more elements") {
+  test(
+    "next should throw NoSuchElementException when there are no more elements"
+  ) {
     val json = """{"name":"Alice"}"""
     val iterator = new JsonIterator(Source.fromString(json))
     val res1 = iterator.next() // Consume the only element
     val res2 = iterator.next() // Attempt to consume the next element
-    assert(res2.isLeft, "Expected a Left result when there are no more elements")
+    assert(
+      res2.isLeft,
+      "Expected a Left result when there are no more elements"
+    )
   }
 
   test("JsonIterator should throw an exception for malformed JSON") {
-    val malformedJson = """{"user": "Alice", "age": 30, "data": [10, "no end brace""" // Malformed JSON
+    val malformedJson =
+      """{"user": "Alice", "age": 30, "data": [10, "no end brace""" // Malformed JSON
     val caught = intercept[IllegalArgumentException] {
       new JsonIterator(Source.fromString(malformedJson))
     }
-    assert(caught.getMessage.contains("Failed to parse JSON"), "Exception message should indicate parsing failure")
+    assert(
+      caught.getMessage.contains("Failed to parse JSON"),
+      "Exception message should indicate parsing failure"
+    )
   }
 
   test("next should handle a simple JSON key-value pair") {
@@ -71,7 +88,10 @@ class JsonParsing extends FunSuite{
     val json = """[{"name":"Alice"}, {"name":"Bob"}]"""
     val iterator = new JsonIterator(Source.fromString(json))
     val firstResult = iterator.next()
-    assert(firstResult.isRight, "Expected Right containing a JsonIterator for array elements")
+    assert(
+      firstResult.isRight,
+      "Expected Right containing a JsonIterator for array elements"
+    )
     firstResult match {
       case Right(("[0]", subIterator: JsonIterator)) =>
         val arrayResults = subIterator.toList
@@ -110,53 +130,64 @@ class JsonParsing extends FunSuite{
     result match {
       case Right(("numbers", subIterator: JsonIterator)) =>
         val firstNumber = subIterator.next()
-        assertEquals(firstNumber, Right("[0]", BigDecimal(1)))  // Adjusted to match the expected index key
+        assertEquals(
+          firstNumber,
+          Right("[0]", BigDecimal(1))
+        ) // Adjusted to match the expected index key
         val secondNumber = subIterator.next()
-        assertEquals(secondNumber, Right("[1]", BigDecimal(2)))  // Adjusted to match the expected index key
+        assertEquals(
+          secondNumber,
+          Right("[1]", BigDecimal(2))
+        ) // Adjusted to match the expected index key
         val thirdNumber = subIterator.next()
-        assertEquals(thirdNumber, Right("[2]", BigDecimal(3)))  // Adjusted to match the expected index key
+        assertEquals(
+          thirdNumber,
+          Right("[2]", BigDecimal(3))
+        ) // Adjusted to match the expected index key
       case _ => fail("Expected a JsonIterator for the array elements")
     }
   }
 
-
-    test("JsonIterator should handle an array of mixed types") {
-      val json = """{"mixed": [1, "two", null, true, {"key": "value"}, [1, 2]]}"""
-      val iterator = new JsonIterator(Source.fromString(json))
-      val result = iterator.next()
-      assert(result.isRight, "Expected Right with a JsonIterator for mixed array")
-      result match {
-        case Right(("mixed", subIterator: JsonIterator)) =>
-          val numResult = subIterator.next()
-          assertEquals(numResult, Right("[0]", BigDecimal(1)))
-          val strResult = subIterator.next()
-          assertEquals(strResult, Right("[1]", "two"))
-          val nullResult = subIterator.next()
-          assertEquals(nullResult, Right("[2]", None))
-          val boolResult = subIterator.next()
-          assertEquals(boolResult, Right("[3]", true))
-          val objResult = subIterator.next()
-          objResult match {
-            case Right(("[4]", objSubIterator: JsonIterator)) =>
-              val keyValue = objSubIterator.next()
-              assertEquals(keyValue, Right("key", "value"))
-            case _ => fail("Expected a JsonIterator for the embedded object in array")
-          }
-          val innerArrResult = subIterator.next()
-          innerArrResult match {
-            case Right(("[5]", arrSubIterator: JsonIterator)) =>
-              val firstArrItem = arrSubIterator.next()
-              assertEquals(firstArrItem, Right("[0]", BigDecimal(1)))
-              val secondArrItem = arrSubIterator.next()
-              assertEquals(secondArrItem, Right("[1]", BigDecimal(2)))
-            case _ => fail("Expected a JsonIterator for the embedded array in array")
-          }
-        case _ => fail("Expected a JsonIterator for the 'mixed' key")
-      }
+  test("JsonIterator should handle an array of mixed types") {
+    val json = """{"mixed": [1, "two", null, true, {"key": "value"}, [1, 2]]}"""
+    val iterator = new JsonIterator(Source.fromString(json))
+    val result = iterator.next()
+    assert(result.isRight, "Expected Right with a JsonIterator for mixed array")
+    result match {
+      case Right(("mixed", subIterator: JsonIterator)) =>
+        val numResult = subIterator.next()
+        assertEquals(numResult, Right("[0]", BigDecimal(1)))
+        val strResult = subIterator.next()
+        assertEquals(strResult, Right("[1]", "two"))
+        val nullResult = subIterator.next()
+        assertEquals(nullResult, Right("[2]", None))
+        val boolResult = subIterator.next()
+        assertEquals(boolResult, Right("[3]", true))
+        val objResult = subIterator.next()
+        objResult match {
+          case Right(("[4]", objSubIterator: JsonIterator)) =>
+            val keyValue = objSubIterator.next()
+            assertEquals(keyValue, Right("key", "value"))
+          case _ =>
+            fail("Expected a JsonIterator for the embedded object in array")
+        }
+        val innerArrResult = subIterator.next()
+        innerArrResult match {
+          case Right(("[5]", arrSubIterator: JsonIterator)) =>
+            val firstArrItem = arrSubIterator.next()
+            assertEquals(firstArrItem, Right("[0]", BigDecimal(1)))
+            val secondArrItem = arrSubIterator.next()
+            assertEquals(secondArrItem, Right("[1]", BigDecimal(2)))
+          case _ =>
+            fail("Expected a JsonIterator for the embedded array in array")
+        }
+      case _ => fail("Expected a JsonIterator for the 'mixed' key")
     }
+  }
 
   test("JsonIterator should handle large nested mixed content") {
-    val json = """{"outer": {"arr": [10, {"inner": "text"}, false], "bool": true}}"""
+    val json =
+      """{"outer": {"arr": [10, {"inner": "text"}, false], "bool": true}}"""
     val iterator = new JsonIterator(Source.fromString(json))
     val outerResult = iterator.next()
     assert(outerResult.isRight, "Expected Right for 'outer'")
@@ -172,7 +203,8 @@ class JsonParsing extends FunSuite{
               case Right(("[1]", innerSubIterator: JsonIterator)) =>
                 val innerText = innerSubIterator.next()
                 assertEquals(innerText, Right("inner", "text"))
-              case _ => fail("Expected a JsonIterator for the nested object in array")
+              case _ =>
+                fail("Expected a JsonIterator for the nested object in array")
             }
             val bool = arrSubIterator.next()
             assertEquals(bool, Right("[2]", false))
@@ -184,7 +216,9 @@ class JsonParsing extends FunSuite{
     }
   }
 
-  test("JsonIterator should handle a complex JSON structure with an outer array and various nested elements") {
+  test(
+    "JsonIterator should handle a complex JSON structure with an outer array and various nested elements"
+  ) {
     val json =
       """[{"id": 1, "name": "Item1", "details": {"color": "red", "size": "large"}},{"id": 2, "name": "Item2", "properties": [true, 99.99, "available", {"date": "2022-01-01"}]},{"id": 3, "type": "Item3", "misc": {"info": "Testing"}},{"id": 4, "complex": [{"nestedLevel1": [{"nestedLevel2": "deepValue"}]}]}]""".stripMargin
     val iterator = new JsonIterator(Source.fromString(json))
@@ -267,10 +301,58 @@ class JsonParsing extends FunSuite{
     val results = extractValues(iterator)
 
     val expectedResults = List(
-      ("[0]", List(("id", BigDecimal(1)), ("name", "Item1"), ("details", List(("color", "red"), ("size", "large"))))),
-      ("[1]", List(("id", BigDecimal(2)), ("name", "Item2"), ("properties", List(("[0]", true), ("[1]", BigDecimal(99.99)), ("[2]", "available"), ("[3]", List(("date", "2022-01-01"))))))),
-      ("[2]", List(("id", BigDecimal(3)), ("type", "Item3"), ("misc", List(("info", "Testing"))))),
-      ("[3]", List(("id", BigDecimal(4)), ("complex", List(("[0]", List(("nestedLevel1", List(("[0]", List(("nestedLevel2", "deepValue")))))))))))
+      (
+        "[0]",
+        List(
+          ("id", BigDecimal(1)),
+          ("name", "Item1"),
+          ("details", List(("color", "red"), ("size", "large")))
+        )
+      ),
+      (
+        "[1]",
+        List(
+          ("id", BigDecimal(2)),
+          ("name", "Item2"),
+          (
+            "properties",
+            List(
+              ("[0]", true),
+              ("[1]", BigDecimal(99.99)),
+              ("[2]", "available"),
+              ("[3]", List(("date", "2022-01-01")))
+            )
+          )
+        )
+      ),
+      (
+        "[2]",
+        List(
+          ("id", BigDecimal(3)),
+          ("type", "Item3"),
+          ("misc", List(("info", "Testing")))
+        )
+      ),
+      (
+        "[3]",
+        List(
+          ("id", BigDecimal(4)),
+          (
+            "complex",
+            List(
+              (
+                "[0]",
+                List(
+                  (
+                    "nestedLevel1",
+                    List(("[0]", List(("nestedLevel2", "deepValue"))))
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
     )
 
     assertEquals(results, expectedResults)
