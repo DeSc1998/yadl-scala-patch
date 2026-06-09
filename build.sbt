@@ -1,7 +1,7 @@
-ThisBuild / scalaVersion := "3.4.1"
-val fastparse = "com.lihaoyi" %% "fastparse" % "3.1.0"
+ThisBuild / scalaVersion := "3.8.4"
+val fastparse = "com.lihaoyi" %% "fastparse" % "3.1.1"
 
-val circeVersion = "0.14.1"
+val circeVersion = "0.14.14"
 lazy val root = project
   .in(file("."))
   .settings(
@@ -9,12 +9,12 @@ lazy val root = project
     assembly / assemblyJarName := "yadl.jar",
     name := "yadl",
     version := "0.1.0",
-    libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test,
+    libraryDependencies += "org.scalameta" %% "munit" % "1.3.3" % Test,
     libraryDependencies += fastparse,
     libraryDependencies ++= Seq(
       "io.circe" %% "circe-core",
       "io.circe" %% "circe-generic",
       "io.circe" %% "circe-parser"
     ).map(_ % circeVersion),
-      libraryDependencies += "io.circe" %% "circe-parser" % circeVersion
+    libraryDependencies += "io.circe" %% "circe-parser" % circeVersion
   )
