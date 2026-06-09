@@ -275,6 +275,7 @@ def basePrefix[$: P] =
     case Some("0o") => Base.Octal
     case Some("0x") => Base.Hexadecimal
     case None       => Base.Decimal
+    case Some(_)    => assert(false, "unreachable")
   }
 
 def numberDigits[$: P](baseType: Base) = baseType match {
@@ -362,7 +363,7 @@ def formatStringMap(input: String): FormatString = {
         assert(false, "Braces closed without being open")
       else {
         braces_open = false
-        parse(next_input, expressionEnd(_)) match {
+        parse(next_input, expressionEnd(using _)) match {
           case Parsed.Success(ident, _) => result = result :+ ident
           case _                        => assert(false, "parsing failed")
         }
